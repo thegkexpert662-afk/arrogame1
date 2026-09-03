@@ -4,28 +4,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../engine/arrow_puzzle_engine.dart';
-import '../models/arrow_direction.dart';
 import '../services/ad_service.dart';
 import '../services/gameplay_feedback_service.dart';
 import '../services/level_progress_service.dart';
 
-extension _ArrowDirectionVector on ArrowDirection {
-  Offset get vector {
-    switch (this) {
-      case ArrowDirection.up:
-        return const Offset(0, -1);
-      case ArrowDirection.down:
-        return const Offset(0, 1);
-      case ArrowDirection.left:
-        return const Offset(-1, 0);
-      case ArrowDirection.right:
-        return const Offset(1, 0);
-    }
-  }
-}
-
 class ArrowGameScreen extends StatefulWidget {
   const ArrowGameScreen({super.key, required this.level});
+
   final int level;
 
   @override
@@ -35,35 +20,37 @@ class ArrowGameScreen extends StatefulWidget {
 class _ArrowGameScreenState extends State<ArrowGameScreen>
     with TickerProviderStateMixin {
   final ArrowPuzzleEngine _engine = ArrowPuzzleEngine();
-  final _feedback = GameplayFeedbackService.instance;
-  final _ads = AdService.instance;
+  final GameplayFeedbackService _feedback = GameplayFeedbackService.instance;
+  final AdService _ads = AdService.instance;
 
   late ArrowPuzzle _puzzle;
   late List<GridPoint> _solution;
   final Set<GridPoint> _cleared = <GridPoint>{};
-  final Set<GridPoint> _hintPath = <GridPoint>{};
+  final Set<GridPoint> _hints = <GridPoint>{};
+
   Timer? _timer;
   int _seconds = 0;
   int _moves = 0;
   int _freeHints = 3;
   int _coins = 20;
   int _hearts = 3;
-  int _bestScore = 0;
-  int? _bestTime;
   bool _finished = false;
   bool _paused = false;
   bool _rewardAdLoading = false;
   GridPoint? _wrongPoint;
   GridPoint? _clearingPoint;
   String _message = 'Tap a free arrow to clear it';
-  late AnimationController _winController;
-  late AnimationController _wrongController;
-  late AnimationController _clearController;
+
+  late final AnimationController _winController;
+  late final AnimationController _wrongController;
+  late final AnimationController _clearController;
 
   int get _difficulty => min(10, 6 + ((widget.level - 1) ~/ 10));
   int get _totalArrows =>
       _puzzle.cells.where((cell) => cell.arrows.isNotEmpty).length;
-  int get _remaining => _totalArrows - _cleared.length;
+  int get _remaining => max(0, _totalArrows - _cleared.length);
+  String get _difficultyName =>
+      _difficulty <= 8 ? 'HARD' : 'EXTREME';
 
   @override
   void initState() {
@@ -81,7 +68,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       duration: const Duration(milliseconds: 430),
     );
     _newPuzzle();
-    _loadLevel();
   }
 
   @override
@@ -93,17 +79,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     super.dispose();
   }
 
-  Future<void> _loadLevel() async {
-    final score = await LevelProgressService.instance.bestScore(widget.level);
-    final time = await LevelProgressService.instance.bestTime(widget.level);
-    if (!mounted) return;
-    setState(() {
-      _bestScore = score ?? 0;
-      _bestTime = time;
-      _newPuzzle();
-    });
-  }
-
   void _newPuzzle() {
     _timer?.cancel();
     final random = Random(widget.level * 1000003 + _difficulty);
@@ -112,7 +87,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     );
     _solution = _engine.findSolutionPath(_puzzle);
     _cleared.clear();
-    _hintPath.clear();
+    _hints.clear();
     _wrongPoint = null;
     _clearingPoint = null;
     _seconds = 0;
@@ -148,10 +123,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     );
     await _ads.showInterstitialAfterLevel();
     if (!mounted) return;
-    setState(() {
-      _bestScore = max(_bestScore, score);
-      _bestTime = _bestTime == null ? _seconds : min(_bestTime!, _seconds);
-    });
+
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -160,7 +132,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Level ${widget.level} • ${_difficultyName}'),
+            Text('Level ${widget.level} • $_difficultyName'),
             const SizedBox(height: 10),
             Text(
               'Score: $score',
@@ -174,7 +146,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              _restart();
+              setState(_newPuzzle);
             },
             child: const Text('REPLAY'),
           ),
@@ -190,23 +162,35 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     );
   }
 
-  Future<void> _showWrongAnimation(GridPoint point) async {
-    if (!mounted) return;
-    setState(() {
-      _wrongPoint = point;
-      _message = '🔒 Blocked! Clear the arrow in front first.';
-    });
-    await _wrongController.forward(from: 0);
-    if (!mounted) return;
-    setState(() => _wrongPoint = null);
-  }
+  Future<void> _tapArrow(GridPoint point) async {
+    if (_finished || _paused || _cleared.contains(point) || _clearingPoint != null) {
+      return;
+    }
+    if (_puzzle.cellAt(point).arrows.isEmpty) return;
 
-  Future<void> _showClearAnimation(GridPoint point) async {
-    if (!mounted) return;
+    if (!_engine.canClear(_puzzle, point, _cleared)) {
+      await _feedback.wrongMove();
+      if (!mounted) return;
+      setState(() {
+        _hearts = _feedback.lives;
+        _wrongPoint = point;
+        _message = '🔒 Blocked — clear the arrow in front first';
+      });
+      await _wrongController.forward(from: 0);
+      if (!mounted) return;
+      setState(() => _wrongPoint = null);
+      if (_hearts <= 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (mounted) setState(_newPuzzle);
+      }
+      return;
+    }
+
+    unawaited(_feedback.clearArrow());
     setState(() {
       _clearingPoint = point;
       _cleared.add(point);
-      _hintPath.remove(point);
+      _hints.remove(point);
       _moves++;
       _message = _remaining <= 1
           ? '✨ One more arrow!'
@@ -215,72 +199,46 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     await _clearController.forward(from: 0);
     if (!mounted) return;
     setState(() => _clearingPoint = null);
-  }
-
-  Future<void> _tapArrow(GridPoint point) async {
-    if (_finished || _paused || _cleared.contains(point) || _clearingPoint != null) {
-      return;
-    }
-    final cell = _puzzle.cellAt(point);
-    if (cell.arrows.isEmpty) return;
-
-    if (!_engine.canClear(_puzzle, point, _cleared)) {
-      await _feedback.wrongMove();
-      if (!mounted) return;
-      setState(() => _hearts = _feedback.lives);
-      await _showWrongAnimation(point);
-      if (!mounted) return;
-      if (_hearts <= 0) {
-        await Future<void>.delayed(const Duration(milliseconds: 220));
-        if (!mounted) return;
-        setState(
-          () => _message = '💔 No hearts left — restarting this level…',
-        );
-        await Future<void>.delayed(const Duration(milliseconds: 650));
-        if (!mounted) return;
-        setState(_newPuzzle);
-      }
-      return;
-    }
-
-    unawaited(_feedback.clearArrow());
-    await _showClearAnimation(point);
     if (_cleared.length >= _totalArrows) {
       await _completeLevel();
     }
   }
 
-  bool _consumeHint() {
+  bool _useFreeHint() {
     if (_freeHints <= 0) return false;
     setState(() => _freeHints--);
     return true;
   }
 
+  GridPoint? _nextSolutionPoint() {
+    for (final point in _solution) {
+      if (!_cleared.contains(point)) return point;
+    }
+    return null;
+  }
+
   void _nextHint() {
-    if (!_consumeHint()) {
+    if (!_useFreeHint()) {
       setState(() => _message = 'No free hints left.');
       return;
     }
-    final next = _solution
-        .where((point) => !_cleared.contains(point))
-        .firstOrNull;
-    if (next != null) {
-      setState(() {
-        _hintPath
-          ..clear()
-          ..add(next);
-        _message = '💡 This arrow can be cleared now';
-      });
-    }
+    final next = _nextSolutionPoint();
+    if (next == null) return;
+    setState(() {
+      _hints
+        ..clear()
+        ..add(next);
+      _message = '💡 This arrow can be cleared now';
+    });
   }
 
   void _pathHint() {
-    if (!_consumeHint()) {
+    if (!_useFreeHint()) {
       setState(() => _message = 'No free hints left.');
       return;
     }
     setState(() {
-      _hintPath
+      _hints
         ..clear()
         ..addAll(_solution.where((point) => !_cleared.contains(point)));
       _message = '💡 Valid clearing order highlighted';
@@ -292,11 +250,12 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       setState(() => _message = 'Need 5 coins for a full solution hint.');
       return;
     }
+    final remaining = _solution.where((point) => !_cleared.contains(point));
     setState(() {
       _coins -= 5;
-      _hintPath
+      _hints
         ..clear()
-        ..addAll(_solution.where((point) => !_cleared.contains(point)));
+        ..addAll(remaining);
       _message = '💡 Full solution highlighted';
     });
   }
@@ -310,13 +269,11 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     final shown = await _ads.showRewarded(
       onReward: (_) {
         if (!mounted) return;
-        final next = _solution
-            .where((point) => !_cleared.contains(point))
-            .firstOrNull;
+        final next = _nextSolutionPoint();
         setState(() {
           _freeHints++;
           if (next != null) {
-            _hintPath
+            _hints
               ..clear()
               ..add(next);
           }
@@ -409,7 +366,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           TextButton(
             onPressed: () {
               Navigator.pop(dialogContext);
-              _restart();
+              setState(_newPuzzle);
             },
             child: const Text('RESTART'),
           ),
@@ -423,14 +380,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
         ],
       ),
     );
-  }
-
-  void _restart() => setState(_newPuzzle);
-
-  String get _difficultyName {
-    if (_difficulty <= 5) return 'MEDIUM';
-    if (_difficulty <= 8) return 'HARD';
-    return 'EXTREME';
   }
 
   String _formatTime(int seconds) =>
@@ -460,12 +409,10 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           ),
           IconButton(
             onPressed: _pauseResume,
-            icon: Icon(
-              _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-            ),
+            icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
           ),
           IconButton(
-            onPressed: _restart,
+            onPressed: () => setState(_newPuzzle),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ],
@@ -474,38 +421,21 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
         child: Column(
           children: [
             const SizedBox(height: 4),
-            const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'CLEAR',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 34,
-                    height: 0.95,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                Text(
-                  'THE BOARD',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 34,
-                    height: 0.95,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
+            const Text(
+              'CLEAR\nTHE BOARD',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 34,
+                height: .95,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Row(
                 children: [
-                  _Pill(
-                    icon: Icons.arrow_forward_rounded,
-                    text: '$_remaining',
-                  ),
+                  _Pill(icon: Icons.arrow_forward_rounded, text: '$_remaining'),
                   const Spacer(),
                   _Hearts(count: _hearts),
                   const Spacer(),
@@ -517,15 +447,11 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
               child: Row(
                 children: [
-                  Text(
-                    '⏱ ${_formatTime(_seconds)}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                  Text('⏱ ${_formatTime(_seconds)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                   const Spacer(),
-                  Text(
-                    '🪙 $_coins',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  Text('🪙 $_coins',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                 ],
               ),
             ),
@@ -534,56 +460,54 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
                 child: AspectRatio(
                   aspectRatio: _puzzle.columns / _puzzle.rows,
                   child: Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(8),
                     child: AnimatedBuilder(
                       animation: Listenable.merge([
                         _wrongController,
                         _clearController,
                       ]),
-                      builder: (context, child) {
-                        return Transform.translate(
-                          offset: Offset(
-                            _wrongPoint == null
-                                ? 0
-                                : sin(_wrongController.value * pi * 6) * 7,
-                            0,
+                      builder: (context, _) => Transform.translate(
+                        offset: Offset(
+                          _wrongPoint == null
+                              ? 0
+                              : sin(_wrongController.value * pi * 6) * 7,
+                          0,
+                        ),
+                        child: CustomPaint(
+                          painter: _ArrowBoardPainter(
+                            puzzle: _puzzle,
+                            cleared: _cleared,
+                            hints: _hints,
+                            wrongPoint: _wrongPoint,
+                            wrongProgress: _wrongController.value,
+                            clearingPoint: _clearingPoint,
+                            clearProgress: _clearController.value,
                           ),
-                          child: CustomPaint(
-                            painter: _ArrowBoardPainter(
-                              puzzle: _puzzle,
-                              cleared: _cleared,
-                              hints: _hintPath,
-                              wrongPoint: _wrongPoint,
-                              wrongProgress: _wrongController.value,
-                              clearingPoint: _clearingPoint,
-                              clearProgress: _clearController.value,
+                          child: GridView.builder(
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _puzzle.rows * _puzzle.columns,
+                            gridDelegate:
+                                SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: _puzzle.columns,
                             ),
-                            child: GridView.builder(
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: _puzzle.rows * _puzzle.columns,
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: _puzzle.columns,
-                              ),
-                              itemBuilder: (_, index) {
-                                final point = GridPoint(
-                                  index ~/ _puzzle.columns,
-                                  index % _puzzle.columns,
-                                );
-                                final hasArrow = _puzzle
-                                    .cellAt(point)
-                                    .arrows
-                                    .isNotEmpty;
-                                return GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: hasArrow ? () => _tapArrow(point) : null,
-                                  child: const SizedBox.expand(),
-                                );
-                              },
-                            ),
+                            itemBuilder: (_, index) {
+                              final point = GridPoint(
+                                index ~/ _puzzle.columns,
+                                index % _puzzle.columns,
+                              );
+                              final hasArrow = _puzzle
+                                  .cellAt(point)
+                                  .arrows
+                                  .isNotEmpty;
+                              return GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: hasArrow ? () => _tapArrow(point) : null,
+                                child: const SizedBox.expand(),
+                              );
+                            },
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -618,7 +542,7 @@ class _Pill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.8),
+        color: Colors.white.withValues(alpha: .82),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
@@ -628,10 +552,7 @@ class _Pill extends StatelessWidget {
             Icon(icon, size: 17),
             const SizedBox(width: 5),
           ],
-          Text(
-            text,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
+          Text(text, style: const TextStyle(fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -681,99 +602,99 @@ class _ArrowBoardPainter extends CustomPainter {
   final GridPoint? clearingPoint;
   final double clearProgress;
 
+  Offset _center(GridPoint p, double w, double h) => Offset(
+        p.col * w + w / 2,
+        p.row * h + h / 2,
+      );
+
   @override
   void paint(Canvas canvas, Size size) {
     if (puzzle.rows <= 0 || puzzle.columns <= 0) return;
 
-    final cellWidth = size.width / puzzle.columns;
-    final cellHeight = size.height / puzzle.rows;
+    final w = size.width / puzzle.columns;
+    final h = size.height / puzzle.rows;
+    final unit = min(w, h);
+    const baseColor = Color(0xFF102A43);
 
-    final backgroundPaint = Paint()..color = const Color(0xFFF8F5EA);
-    canvas.drawRect(Offset.zero & size, backgroundPaint);
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFFF8F5EA),
+    );
 
     for (var row = 0; row < puzzle.rows; row++) {
       for (var col = 0; col < puzzle.columns; col++) {
-        final point = GridPoint(row, col);
-        final cell = puzzle.cellAt(point);
+        final origin = GridPoint(row, col);
+        final cell = puzzle.cellAt(origin);
+        if (cell.arrows.isEmpty || cleared.contains(origin)) continue;
 
-        if (cell.arrows.isEmpty || cleared.contains(point)) continue;
+        final points = puzzle.paths[origin];
+        if (points == null || points.length < 2) continue;
 
-        final center = Offset(
-          col * cellWidth + cellWidth / 2,
-          row * cellHeight + cellHeight / 2,
-        );
-        final direction = cell.arrows.first;
+        final isHint = hints.contains(origin);
+        final isWrong = wrongPoint == origin;
+        final isClearing = clearingPoint == origin;
+        var color = baseColor;
+        if (isHint) color = Colors.amber.shade700;
+        if (isWrong) color = Colors.redAccent;
 
-        final isHint = hints.contains(point);
-        final isWrong = wrongPoint == point;
-        final isClearing = clearingPoint == point;
-
-        final length = min(cellWidth, cellHeight) * 0.72;
-        final start = center - direction.vector * (length * 0.38);
-        final end = center + direction.vector * (length * 0.38);
-
-        final pathPaint = Paint()
+        final stroke = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = min(cellWidth, cellHeight) * 0.13
+          ..strokeWidth = unit * .14
           ..strokeCap = StrokeCap.round
-          ..color = isHint
-              ? Colors.amber.shade700
-              : isWrong
-                  ? Colors.redAccent
-                  : const Color(0xFF102A43);
-
-        if (isClearing) {
-          pathPaint.strokeWidth *= 1 - clearProgress * 0.55;
-          pathPaint.color = const Color(0xFF102A43).withValues(
-            alpha: 1 - clearProgress,
-          );
-        }
+          ..strokeJoin = StrokeJoin.round
+          ..color = color;
 
         if (isWrong) {
-          pathPaint.strokeWidth *= 1 + sin(wrongProgress * pi) * 0.25;
+          stroke.strokeWidth *= 1 + sin(wrongProgress * pi) * .28;
+        }
+        if (isClearing) {
+          stroke.strokeWidth *= 1 - clearProgress * .55;
+          stroke.color = baseColor.withValues(alpha: 1 - clearProgress);
         }
 
-        canvas.drawLine(start, end, pathPaint);
+        final path = Path();
+        final first = _center(points.first, w, h);
+        path.moveTo(first.dx, first.dy);
+        for (final point in points.skip(1)) {
+          final next = _center(point, w, h);
+          path.lineTo(next.dx, next.dy);
+        }
+        canvas.drawPath(path, stroke);
 
-        final headSize = min(cellWidth, cellHeight) * 0.25;
-        final tip = end + direction.vector * headSize * 0.45;
-        final perpendicular = Offset(
-          -direction.vector.dy,
-          direction.vector.dx,
-        );
+        final tip = _center(points.last, w, h);
+        final previous = _center(points[points.length - 2], w, h);
+        final delta = tip - previous;
+        final distance = delta.distance;
+        if (distance == 0) continue;
 
-        final arrowPath = Path()
-          ..moveTo(tip.dx, tip.dy)
-          ..lineTo(
-            tip.dx - direction.vector.dx * headSize +
-                perpendicular.dx * headSize * 0.62,
-            tip.dy - direction.vector.dy * headSize +
-                perpendicular.dy * headSize * 0.62,
+        final direction = delta / distance;
+        final side = Offset(-direction.dy, direction.dx);
+        final head = unit * .33;
+        final headPath = Path()
+          ..moveTo(
+            tip.dx + direction.dx * head * .58,
+            tip.dy + direction.dy * head * .58,
           )
           ..lineTo(
-            tip.dx - direction.vector.dx * headSize -
-                perpendicular.dx * headSize * 0.62,
-            tip.dy - direction.vector.dy * headSize -
-                perpendicular.dy * headSize * 0.62,
+            tip.dx - direction.dx * head + side.dx * head * .62,
+            tip.dy - direction.dy * head + side.dy * head * .62,
+          )
+          ..lineTo(
+            tip.dx - direction.dx * head - side.dx * head * .62,
+            tip.dy - direction.dy * head - side.dy * head * .62,
           )
           ..close();
 
-        final fillPaint = Paint()
-          ..style = PaintingStyle.fill
-          ..color = pathPaint.color;
-        canvas.drawPath(arrowPath, fillPaint);
+        canvas.drawPath(
+          headPath,
+          Paint()
+            ..style = PaintingStyle.fill
+            ..color = stroke.color,
+        );
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) {
-    return oldDelegate.puzzle != puzzle ||
-        oldDelegate.cleared != cleared ||
-        oldDelegate.hints != hints ||
-        oldDelegate.wrongPoint != wrongPoint ||
-        oldDelegate.wrongProgress != wrongProgress ||
-        oldDelegate.clearingPoint != clearingPoint ||
-        oldDelegate.clearProgress != clearProgress;
-  }
+  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => true;
 }

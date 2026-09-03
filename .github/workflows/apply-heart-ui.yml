@@ -1,0 +1,56 @@
+name: Apply Heart UI
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  apply-heart-ui:
+    if: ${{ !contains(github.event.head_commit.message, 'Apply dynamic heart loss UI') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update game hearts
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('lib/screens/arrow_game_screen.dart')
+          text = path.read_text()
+
+          text = text.replace(
+              "  bool _rewardAdLoading = false;\n",
+              "  bool _rewardAdLoading = false;\n  int _hearts = 3;\n",
+              1,
+          )
+
+          text = text.replace(
+              "    _moves = 0;\n    _finished = false;",
+              "    _moves = 0;\n    _hearts = 3;\n    _feedback.resetLives();\n    _finished = false;",
+              1,
+          )
+
+          text = text.replace(
+              "      await _feedback.wrongMove();\n      await _showWrongAnimation(point);",
+              "      await _feedback.wrongMove();\n      if (mounted) setState(() => _hearts = _feedback.lives);\n      await _showWrongAnimation(point);",
+              1,
+          )
+
+          old = """                  const Text('♥ ♥ ♥', style: TextStyle(fontSize: 24, color: Colors.redAccent, letterSpacing: 3)),"""
+          new = """                  Row(\n                    mainAxisSize: MainAxisSize.min,\n                    children: List.generate(3, (index) {\n                      final alive = index < _hearts;\n                      return Padding(\n                        padding: const EdgeInsets.symmetric(horizontal: 2),\n                        child: AnimatedSwitcher(\n                          duration: const Duration(milliseconds: 220),\n                          transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),\n                          child: Icon(\n                            alive ? Icons.favorite_rounded : Icons.heart_broken_rounded,\n                            key: ValueKey(alive),\n                            size: 25,\n                            color: alive ? Colors.redAccent : Colors.grey,\n                          ),\n                        ),\n                      );\n                    }),\n                  ),"""
+          if old not in text:
+              raise SystemExit('Expected heart UI was not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+      - name: Commit game change and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/screens/arrow_game_screen.dart
+          git rm .github/workflows/apply-heart-ui.yml
+          git commit -m "Apply dynamic heart loss UI"
+          git push

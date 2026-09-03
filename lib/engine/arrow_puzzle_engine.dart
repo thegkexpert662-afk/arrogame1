@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 
 import '../models/arrow_cell.dart';
@@ -23,16 +24,29 @@ class ArrowPuzzle {
   ArrowCell cellAt(GridPoint point) => cells[point.row * columns + point.col];
 
   bool contains(GridPoint point) =>
-      point.row >= 0 && point.row < rows && point.col >= 0 && point.col < columns;
+      point.row >= 0 &&
+      point.row < rows &&
+      point.col >= 0 &&
+      point.col < columns;
 }
 
+/// Procedural generator for arrow-path puzzles.
+///
+/// Generation always starts with a guaranteed path, then adds decoys and
+/// dead-end traps. Every generated puzzle is verified with a real path search
+/// before it is returned, so an unsolvable board is never accepted.
 class ArrowPuzzleEngine {
   ArrowPuzzleEngine({Random? random}) : _random = random ?? Random();
 
   final Random _random;
 
-  ArrowPuzzle generate({int? rows, int? columns, int difficulty = 1}) {
-    final size = _sizeForDifficulty(difficulty);
+  ArrowPuzzle generate({
+    int? rows,
+    int? columns,
+    int difficulty = 1,
+  }) {
+    final level = difficulty.clamp(1, 10);
+    final size = _sizeForDifficulty(level);
     final r = rows ?? size.$1;
     final c = columns ?? size.$2;
 
@@ -40,12 +54,15 @@ class ArrowPuzzleEngine {
       throw ArgumentError('Arrow puzzle must be at least 3x3.');
     }
 
-    for (var attempt = 0; attempt < 100; attempt++) {
+    final fingerprints = <String>{};
+
+    // Multiple attempts protect generation from unlucky random layouts.
+    for (var attempt = 0; attempt < 250; attempt++) {
       final start = GridPoint(_random.nextInt(r), 0);
       final finish = GridPoint(_random.nextInt(r), c - 1);
       if (start == finish) continue;
 
-      final solution = _makeSolutionPath(r, c, start, finish);
+      final solution = _makeGuaranteedSolutionPath(r, c, start, finish);
       if (solution.length < 3) continue;
 
       final cells = List<ArrowCell>.generate(
@@ -53,9 +70,16 @@ class ArrowPuzzleEngine {
         (index) => ArrowCell(row: index ~/ c, col: index % c),
       );
 
-      _addSolutionDirections(cells, solution, c);
-      _addExtraRoutesAndTraps(cells, r, c, solution, difficulty);
-      _ensureStartHasSolutionOnly(cells, start, solution, c);
+      _placeSolutionArrows(cells, solution, c);
+      _placeDecoysAndDeadEnds(
+        cells,
+        rows: r,
+        columns: c,
+        solution: solution,
+        difficulty: level,
+      );
+      _lockStartToSolution(cells, start, solution, c);
+      _clearFinish(cells, finish, c);
 
       final puzzle = ArrowPuzzle(
         rows: r,
@@ -63,105 +87,192 @@ class ArrowPuzzleEngine {
         cells: cells,
         start: start,
         finish: finish,
-        solution: solution,
+        solution: List.unmodifiable(solution),
       );
 
-      if (validateSolution(puzzle)) return puzzle;
+      final fingerprint = _fingerprint(puzzle);
+      if (!fingerprints.add(fingerprint)) continue;
+
+      // Verify both the authored solution and the actual board reachability.
+      if (validateSolution(puzzle) && findSolutionPath(puzzle) != null) {
+        return puzzle;
+      }
     }
 
-    throw StateError('Could not generate a valid arrow puzzle.');
+    throw StateError('Could not generate a valid unique arrow puzzle.');
   }
 
+  /// Board size grows with difficulty.
   (int, int) _sizeForDifficulty(int difficulty) {
     if (difficulty <= 2) return (6, 8);
-    if (difficulty <= 5) return (8, 10);
+    if (difficulty <= 4) return (7, 9);
+    if (difficulty <= 6) return (8, 11);
     if (difficulty <= 8) return (10, 13);
     return (12, 16);
   }
 
-  List<GridPoint> _makeSolutionPath(int rows, int columns, GridPoint start, GridPoint finish) {
+  /// Creates a guaranteed simple-to-complex route using only progress toward
+  /// the finish: every horizontal step moves right and every vertical step
+  /// moves toward the finish row. The ordering is randomized, producing many
+  /// different valid routes while never creating a loop in the solution.
+  List<GridPoint> _makeGuaranteedSolutionPath(
+    int rows,
+    int columns,
+    GridPoint start,
+    GridPoint finish,
+  ) {
     final path = <GridPoint>[start];
-    var current = start;
-    var guard = 0;
+    var row = start.row;
+    var col = start.col;
 
-    while (current != finish && guard++ < rows * columns * 4) {
-      final candidates = <GridPoint>[];
-      for (final direction in ArrowDirection.values) {
-        final next = current.move(direction);
-        if (!next.equals(finish) && !path.contains(next) && _inside(next, rows, columns)) {
-          candidates.add(next);
-        } else if (next == finish) {
-          candidates.add(next);
-        }
-      }
-      if (candidates.isEmpty) return <GridPoint>[];
-
-      candidates.shuffle(_random);
-      final preferred = candidates.where((point) {
-        final distance = (point.row - finish.row).abs() + (point.col - finish.col).abs();
-        final currentDistance = (current.row - finish.row).abs() + (current.col - finish.col).abs();
-        return distance <= currentDistance || _random.nextDouble() < 0.18;
-      }).toList();
-      current = (preferred.isNotEmpty ? preferred : candidates).first;
-      path.add(current);
+    final vertical = <GridPoint>[];
+    final rowStep = finish.row >= row ? 1 : -1;
+    while (row != finish.row) {
+      row += rowStep;
+      vertical.add(GridPoint(row, col));
     }
 
-    return current == finish ? path : <GridPoint>[];
+    final horizontal = <GridPoint>[];
+    while (col != finish.col) {
+      col += 1;
+      horizontal.add(GridPoint(row, col));
+    }
+
+    // Randomly interleave vertical and horizontal progress. We never move
+    // backwards, so every produced path is valid and cycle-free.
+    final verticalQueue = Queue<GridPoint>.from(vertical);
+    final horizontalQueue = Queue<GridPoint>.from(horizontal);
+
+    while (verticalQueue.isNotEmpty || horizontalQueue.isNotEmpty) {
+      final takeVertical = horizontalQueue.isEmpty ||
+          (verticalQueue.isNotEmpty && _random.nextBool());
+      path.add(takeVertical ? verticalQueue.removeFirst() : horizontalQueue.removeFirst());
+    }
+
+    return path;
   }
 
-  void _addSolutionDirections(List<ArrowCell> cells, List<GridPoint> solution, int columns) {
+  void _placeSolutionArrows(
+    List<ArrowCell> cells,
+    List<GridPoint> solution,
+    int columns,
+  ) {
     for (var i = 0; i < solution.length - 1; i++) {
       final from = solution[i];
       final to = solution[i + 1];
-      final direction = _directionBetween(from, to);
-      cells[from.row * columns + from.col].arrows.add(direction);
+      cells[from.row * columns + from.col].arrows.add(
+            _directionBetween(from, to),
+          );
     }
   }
 
-  void _addExtraRoutesAndTraps(
-    List<ArrowCell> cells,
-    int rows,
-    int columns,
-    List<GridPoint> solution,
-    int difficulty,
-  ) {
+  void _placeDecoysAndDeadEnds(
+    List<ArrowCell> cells, {
+    required int rows,
+    required int columns,
+    required List<GridPoint> solution,
+    required int difficulty,
+  }) {
     final solutionSet = solution.toSet();
-    final extraChance = min(0.55, 0.16 + difficulty * 0.045);
+    final profile = _difficultyProfile(difficulty);
 
+    // First create real trap targets: empty cells that can be entered but
+    // cannot continue. Some neighbouring cells then point into those traps.
+    final trapTargets = <GridPoint>[];
+    final candidates = cells
+        .map((cell) => GridPoint(cell.row, cell.col))
+        .where((point) =>
+            !solutionSet.contains(point) && point != solution.last)
+        .toList()
+      ..shuffle(_random);
+
+    final targetCount = min(
+      candidates.length,
+      max(1, (candidates.length * profile.trapChance).round()),
+    );
+    trapTargets.addAll(candidates.take(targetCount));
+
+    for (final target in trapTargets) {
+      final feeders = <GridPoint>[];
+      for (final direction in ArrowDirection.values) {
+        final from = target.move(direction.opposite);
+        if (_inside(from, rows, columns) && !solutionSet.contains(from)) {
+          feeders.add(from);
+        }
+      }
+      feeders.shuffle(_random);
+      if (feeders.isNotEmpty) {
+        final feeder = feeders.first;
+        cells[feeder.row * columns + feeder.col].arrows.add(
+              _directionBetween(feeder, target),
+            );
+      }
+    }
+
+    // Fill non-solution cells with controlled decoy arrows. Decoys are what
+    // make the board feel like a real puzzle rather than a single corridor.
     for (final cell in cells) {
       final point = GridPoint(cell.row, cell.col);
-      if (point == solution.last) continue;
+      if (point == solution.last || solutionSet.contains(point)) continue;
 
       final possible = ArrowDirection.values.where((direction) {
-        final next = point.move(direction);
-        return _inside(next, rows, columns);
+        return _inside(point.move(direction), rows, columns);
       }).toList()
         ..shuffle(_random);
 
-      if (!solutionSet.contains(point) && possible.isNotEmpty) {
+      if (possible.isEmpty) continue;
+
+      if (_random.nextDouble() < profile.decoyChance) {
         cell.arrows.add(possible.first);
-        if (_random.nextDouble() < extraChance && possible.length > 1) {
-          cell.arrows.add(possible[1]);
-        }
-      } else if (_random.nextDouble() < extraChance && possible.isNotEmpty) {
-        final direction = possible.firstWhere(
-          (d) => point.move(d) != (solutionSet.contains(point) ? solution.last : point),
-          orElse: () => possible.first,
-        );
-        cell.arrows.add(direction);
+      }
+
+      if (possible.length > 1 && _random.nextDouble() < profile.extraArrowChance) {
+        cell.arrows.add(possible[1]);
+      }
+    }
+
+    // Add occasional alternative exits from solution cells. This introduces
+    // optional routes and traps without removing the guaranteed solution.
+    for (var i = 0; i < solution.length - 1; i++) {
+      if (_random.nextDouble() >= profile.solutionDecoyChance) continue;
+      final point = solution[i];
+      final next = solution[i + 1];
+      final alternatives = ArrowDirection.values.where((direction) {
+        final target = point.move(direction);
+        return target != next && _inside(target, rows, columns);
+      }).toList()
+        ..shuffle(_random);
+
+      if (alternatives.isNotEmpty) {
+        cells[point.row * columns + point.col].arrows.add(alternatives.first);
       }
     }
   }
 
-  void _ensureStartHasSolutionOnly(
+  _DifficultyProfile _difficultyProfile(int difficulty) {
+    final d = difficulty.clamp(1, 10);
+    return _DifficultyProfile(
+      decoyChance: min(0.82, 0.25 + d * 0.055),
+      extraArrowChance: min(0.55, 0.05 + d * 0.035),
+      trapChance: min(0.30, 0.06 + d * 0.022),
+      solutionDecoyChance: min(0.70, 0.05 + d * 0.06),
+    );
+  }
+
+  void _lockStartToSolution(
     List<ArrowCell> cells,
     GridPoint start,
     List<GridPoint> solution,
     int columns,
   ) {
     final startCell = cells[start.row * columns + start.col];
-    startCell.arrows.clear();
-    startCell.arrows.add(_directionBetween(solution[0], solution[1]));
+    startCell.arrows
+      ..clear()
+      ..add(_directionBetween(solution[0], solution[1]));
+  }
+
+  void _clearFinish(List<ArrowCell> cells, GridPoint finish, int columns) {
+    cells[finish.row * columns + finish.col].arrows.clear();
   }
 
   bool canMove(ArrowPuzzle puzzle, GridPoint from, ArrowDirection direction) {
@@ -173,24 +284,111 @@ class ArrowPuzzleEngine {
 
   bool isFinish(ArrowPuzzle puzzle, GridPoint point) => point == puzzle.finish;
 
+  /// Validates the generator's stored solution path.
   bool validateSolution(ArrowPuzzle puzzle) {
-    var current = puzzle.start;
+    final solution = puzzle.solution;
+    if (solution.length < 2) return false;
+    if (solution.first != puzzle.start || solution.last != puzzle.finish) {
+      return false;
+    }
+
+    for (var i = 0; i < solution.length - 1; i++) {
+      final from = solution[i];
+      final to = solution[i + 1];
+      if (!puzzle.contains(from) || !puzzle.contains(to)) return false;
+
+      final rowDistance = (from.row - to.row).abs();
+      final colDistance = (from.col - to.col).abs();
+      if (rowDistance + colDistance != 1) return false;
+
+      if (!canMove(puzzle, from, _directionBetween(from, to))) return false;
+    }
+    return true;
+  }
+
+  /// Searches the actual arrows on the board and returns one real route to
+  /// the finish. This catches accidental unsolvable puzzles independently of
+  /// the generator's stored solution.
+  List<GridPoint>? findSolutionPath(ArrowPuzzle puzzle) {
+    final parent = <GridPoint, GridPoint?>{puzzle.start: null};
+    final queue = Queue<GridPoint>()..add(puzzle.start);
+
+    while (queue.isNotEmpty) {
+      final current = queue.removeFirst();
+      if (current == puzzle.finish) {
+        return _reconstructPath(parent, puzzle.finish);
+      }
+
+      for (final direction in puzzle.cellAt(current).arrows) {
+        final next = current.move(direction);
+        if (!puzzle.contains(next) || parent.containsKey(next)) continue;
+        parent[next] = current;
+        queue.add(next);
+      }
+    }
+
+    return null;
+  }
+
+  bool isSolvable(ArrowPuzzle puzzle) => findSolutionPath(puzzle) != null;
+
+  /// Returns up to [limit] distinct solution routes. Useful for balancing
+  /// difficulty later: a puzzle may intentionally have one or several routes.
+  int countSolutions(ArrowPuzzle puzzle, {int limit = 2}) {
+    if (limit < 1) return 0;
+    var found = 0;
     final visited = <GridPoint>{};
 
-    for (var i = 0; i < puzzle.rows * puzzle.columns * 2; i++) {
-      if (current == puzzle.finish) return true;
-      if (!visited.add(current)) return false;
-
-      final next = puzzle.solution.length > visited.length
-          ? puzzle.solution[visited.length]
-          : null;
-      if (next == null) return false;
-
-      final direction = _directionBetween(current, next);
-      if (!canMove(puzzle, current, direction)) return false;
-      current = next;
+    void dfs(GridPoint current) {
+      if (found >= limit) return;
+      if (current == puzzle.finish) {
+        found++;
+        return;
+      }
+      visited.add(current);
+      for (final direction in puzzle.cellAt(current).arrows) {
+        final next = current.move(direction);
+        if (puzzle.contains(next) && !visited.contains(next)) {
+          dfs(next);
+        }
+        if (found >= limit) break;
+      }
+      visited.remove(current);
     }
-    return false;
+
+    dfs(puzzle.start);
+    return found;
+  }
+
+  List<GridPoint> _reconstructPath(
+    Map<GridPoint, GridPoint?> parent,
+    GridPoint finish,
+  ) {
+    final path = <GridPoint>[];
+    GridPoint? current = finish;
+    while (current != null) {
+      path.add(current);
+      current = parent[current];
+    }
+    return path.reversed.toList(growable: false);
+  }
+
+  String _fingerprint(ArrowPuzzle puzzle) {
+    final buffer = StringBuffer()
+      ..write('${puzzle.rows}x${puzzle.columns}|')
+      ..write('${puzzle.start.row},${puzzle.start.col}|')
+      ..write('${puzzle.finish.row},${puzzle.finish.col}|');
+
+    for (final cell in puzzle.cells) {
+      buffer.write(cell.row);
+      buffer.write(',');
+      buffer.write(cell.col);
+      buffer.write(':');
+      final arrows = cell.arrows.map((d) => d.index).toList()..sort();
+      buffer.write(arrows.join(','));
+      buffer.write(';');
+    }
+    return buffer.toString();
   }
 
   ArrowDirection _directionBetween(GridPoint from, GridPoint to) {
@@ -204,9 +402,37 @@ class ArrowPuzzleEngine {
   }
 
   bool _inside(GridPoint point, int rows, int columns) =>
-      point.row >= 0 && point.row < rows && point.col >= 0 && point.col < columns;
+      point.row >= 0 &&
+      point.row < rows &&
+      point.col >= 0 &&
+      point.col < columns;
 }
 
-extension on GridPoint {
-  bool equals(GridPoint other) => row == other.row && col == other.col;
+class _DifficultyProfile {
+  const _DifficultyProfile({
+    required this.decoyChance,
+    required this.extraArrowChance,
+    required this.trapChance,
+    required this.solutionDecoyChance,
+  });
+
+  final double decoyChance;
+  final double extraArrowChance;
+  final double trapChance;
+  final double solutionDecoyChance;
+}
+
+extension on ArrowDirection {
+  ArrowDirection get opposite {
+    switch (this) {
+      case ArrowDirection.up:
+        return ArrowDirection.down;
+      case ArrowDirection.down:
+        return ArrowDirection.up;
+      case ArrowDirection.left:
+        return ArrowDirection.right;
+      case ArrowDirection.right:
+        return ArrowDirection.left;
+    }
+  }
 }

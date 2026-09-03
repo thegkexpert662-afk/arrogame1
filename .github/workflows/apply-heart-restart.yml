@@ -42,14 +42,22 @@ jobs:
           if old_difficulty in s:
               s = s.replace(old_difficulty, new_difficulty)
 
-          # Analyzer cleanup: findSolutionPath is non-nullable, so no null fallback is needed.
           s = s.replace(
               "    _solution = _engine.findSolutionPath(_puzzle) ?? <GridPoint>[];",
               "    _solution = _engine.findSolutionPath(_puzzle);",
           )
 
-          # Repair a malformed title string that contains a real newline after the backslash.
-          s = s.replace("Text('CLEAR\\\nTHE BOARD'", "Text('CLEAR\\nTHE BOARD'")
+          # Avoid any parser ambiguity around the title's escaped newline.
+          old_title = "            Text('CLEAR\\nTHE BOARD', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),"
+          new_title = """            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('CLEAR', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+                Text('THE BOARD', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+              ],
+            ),"""
+          if old_title in s:
+              s = s.replace(old_title, new_title)
 
           p.write_text(s)
 
@@ -63,5 +71,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/screens/arrow_game_screen.dart lib/engine/arrow_puzzle_engine.dart .github/workflows/apply-heart-restart.yml
-          git diff --cached --quiet || git commit -m "Fix arrow game screen syntax"
+          git diff --cached --quiet || git commit -m "Fix arrow game title syntax"
           git push

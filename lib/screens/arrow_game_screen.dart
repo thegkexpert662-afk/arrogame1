@@ -83,7 +83,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     _timer?.cancel();
     final random = Random(widget.level * 1000003 + _difficulty);
     _puzzle = ArrowPuzzleEngine(random: random).generate(difficulty: _difficulty);
-    _solution = _engine.findSolutionPath(_puzzle) ?? <GridPoint>[];
+    _solution = _engine.findSolutionPath(_puzzle);
     _cleared.clear();
     _hintPath.clear();
     _wrongPoint = null;

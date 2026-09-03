@@ -32,6 +32,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   int _moves = 0;
   int _freeHints = 3;
   int _coins = 20;
+  int _hearts = 3;
   int _bestScore = 0;
   int? _bestTime;
   bool _finished = false;
@@ -98,6 +99,8 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     _clearingPoint = null;
     _seconds = 0;
     _moves = 0;
+    _hearts = 3;
+    _feedback.resetLives();
     _finished = false;
     _paused = false;
     _message = 'Tap a free arrow to clear it';
@@ -202,7 +205,18 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
 
     if (!_engine.canClear(_puzzle, point, _cleared)) {
       await _feedback.wrongMove();
+      if (!mounted) return;
+      setState(() => _hearts = _feedback.lives);
       await _showWrongAnimation(point);
+      if (!mounted) return;
+      if (_hearts <= 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 220));
+        if (!mounted) return;
+        setState(() => _message = '💔 No hearts left — restarting this level…');
+        await Future<void>.delayed(const Duration(milliseconds: 650));
+        if (!mounted) return;
+        setState(_newPuzzle);
+      }
       return;
     }
 
@@ -387,7 +401,25 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
                 Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children: [
                   _Pill(icon: Icons.arrow_forward_rounded, text: '$_remaining'),
                   const Spacer(),
-                  const Text('♥ ♥ ♥', style: TextStyle(fontSize: 24, color: Colors.redAccent, letterSpacing: 3)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(3, (index) {
+                      final alive = index < _hearts;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                          child: Icon(
+                            alive ? Icons.favorite_rounded : Icons.heart_broken_rounded,
+                            key: ValueKey('$index-$alive'),
+                            color: alive ? Colors.redAccent : Colors.grey,
+                            size: 25,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
                   const Spacer(),
                   _Pill(text: _difficultyName()),
                 ])),

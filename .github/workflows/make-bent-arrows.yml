@@ -1,0 +1,171 @@
+name: Make Arrows Long And Bent
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch long bent visual arrows
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          engine = Path('lib/engine/arrow_puzzle_engine.dart')
+          s = engine.read_text()
+          s = s.replace(
+              "required this.solution,\n  });",
+              "required this.solution,\n    required this.visualPaths,\n  });",
+          )
+          s = s.replace(
+              "final List<GridPoint> solution;\n\n  ArrowCell cellAt",
+              "final List<GridPoint> solution;\n  final Map<GridPoint, List<GridPoint>> visualPaths;\n\n  ArrowCell cellAt",
+          )
+          s = s.replace(
+              "points.sort((a, b) => _edgeDistance(a, r, c).compareTo(_edgeDistance(b, r, c)));\n    return DenseArrowPuzzle(rows: r, columns: c, cells: cells, start: points.first, finish: points.last, solution: List.unmodifiable(points));",
+              "points.sort((a, b) => _edgeDistance(a, r, c).compareTo(_edgeDistance(b, r, c)));\n    final visualPaths = <GridPoint, List<GridPoint>>{};\n    for (final point in points) {\n      final direction = cells[point.row * c + point.col].arrows.first;\n      visualPaths[point] = List.unmodifiable(_makeBentPath(point, direction, r, c));\n    }\n    return DenseArrowPuzzle(rows: r, columns: c, cells: cells, start: points.first, finish: points.last, solution: List.unmodifiable(points), visualPaths: visualPaths);",
+          )
+          marker = "  ArrowDirection _nearestEdgeDirection(GridPoint p, int rows, int columns) {"
+          helper = '''  List<GridPoint> _makeBentPath(GridPoint start, ArrowDirection direction, int rows, int columns) {\n    final result = <GridPoint>[start];\n    var current = start;\n    var heading = direction;\n    final wanted = 5 + _random.nextInt(3);\n    for (var i = 1; i < wanted; i++) {\n      final next = current.move(heading);\n      if (!containsPoint(next, rows, columns)) {\n        final alternatives = <ArrowDirection>[\n          ArrowDirection.up,\n          ArrowDirection.down,\n          ArrowDirection.left,\n          ArrowDirection.right,\n        ]..shuffle(_random);\n        final candidate = alternatives.firstWhere(\n          (d) => containsPoint(current.move(d), rows, columns),\n          orElse: () => heading,\n        );\n        heading = candidate;\n      } else if (i == 2 || i == 4 || _random.nextDouble() < 0.42) {\n        final turns = heading == ArrowDirection.up || heading == ArrowDirection.down\n            ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]\n            : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];\n        heading = turns[_random.nextInt(turns.length)];\n      }\n      final nextPoint = current.move(heading);\n      if (!containsPoint(nextPoint, rows, columns)) break;\n      current = nextPoint;\n      result.add(current);\n    }\n    return result;\n  }\n\n  bool containsPoint(GridPoint p, int rows, int columns) =>\n      p.row >= 0 && p.row < rows && p.col >= 0 && p.col < columns;\n\n'''
+          s = s.replace(marker, helper + marker)
+          engine.write_text(s)
+
+          screen = Path('lib/screens/arrow_game_screen.dart')
+          s = screen.read_text()
+          start = s.index('class _ArrowBoardPainter extends CustomPainter {')
+          painter = r'''class _ArrowBoardPainter extends CustomPainter {
+  _ArrowBoardPainter({
+    required this.puzzle,
+    required this.cleared,
+    required this.hints,
+    required this.wrongPoint,
+    required this.wrongProgress,
+    required this.clearingPoint,
+    required this.clearProgress,
+  });
+
+  final ArrowPuzzle puzzle;
+  final Set<GridPoint> cleared;
+  final Set<GridPoint> hints;
+  final GridPoint? wrongPoint;
+  final double wrongProgress;
+  final GridPoint? clearingPoint;
+  final double clearProgress;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (puzzle.rows <= 0 || puzzle.columns <= 0) return;
+    final cellWidth = size.width / puzzle.columns;
+    final cellHeight = size.height / puzzle.rows;
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFFF8F5EA),
+    );
+
+    for (var row = 0; row < puzzle.rows; row++) {
+      for (var col = 0; col < puzzle.columns; col++) {
+        final point = GridPoint(row, col);
+        final cell = puzzle.cellAt(point);
+        if (cell.arrows.isEmpty || cleared.contains(point)) continue;
+
+        final center = Offset(
+          col * cellWidth + cellWidth / 2,
+          row * cellHeight + cellHeight / 2,
+        );
+        final direction = cell.arrows.first;
+        final points = puzzle.visualPaths[point] ?? <GridPoint>[point];
+        final path = Path();
+        for (var i = 0; i < points.length; i++) {
+          final p = points[i];
+          final offset = Offset(
+            p.col * cellWidth + cellWidth / 2,
+            p.row * cellHeight + cellHeight / 2,
+          );
+          if (i == 0) {
+            path.moveTo(offset.dx, offset.dy);
+          } else {
+            path.lineTo(offset.dx, offset.dy);
+          }
+        }
+
+        final isHint = hints.contains(point);
+        final isWrong = wrongPoint == point;
+        final isClearing = clearingPoint == point;
+        final baseWidth = min(cellWidth, cellHeight) * 0.16;
+        final paint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = baseWidth
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = isHint
+              ? Colors.amber.shade700
+              : isWrong
+                  ? Colors.redAccent
+                  : const Color(0xFF102A43);
+
+        if (isWrong) {
+          paint.strokeWidth *= 1 + sin(wrongProgress * pi) * 0.25;
+        }
+        if (isClearing) {
+          paint.strokeWidth *= 1 - clearProgress * 0.55;
+          paint.color = const Color(0xFF102A43).withValues(alpha: 1 - clearProgress);
+        }
+
+        canvas.drawPath(path, paint);
+
+        final last = points.isEmpty ? point : points.last;
+        final headCenter = Offset(
+          last.col * cellWidth + cellWidth / 2,
+          last.row * cellHeight + cellHeight / 2,
+        );
+        final lastDirection = points.length >= 2
+            ? _directionBetween(points[points.length - 2], points.last)
+            : direction;
+        final headSize = min(cellWidth, cellHeight) * 0.28;
+        final tip = headCenter + lastDirection.vector * headSize * 0.62;
+        final perpendicular = Offset(-lastDirection.vector.dy, lastDirection.vector.dx);
+        final arrowPath = Path()
+          ..moveTo(tip.dx, tip.dy)
+          ..lineTo(
+            tip.dx - lastDirection.vector.dx * headSize + perpendicular.dx * headSize * 0.65,
+            tip.dy - lastDirection.vector.dy * headSize + perpendicular.dy * headSize * 0.65,
+          )
+          ..lineTo(
+            tip.dx - lastDirection.vector.dx * headSize - perpendicular.dx * headSize * 0.65,
+            tip.dy - lastDirection.vector.dy * headSize - perpendicular.dy * headSize * 0.65,
+          )
+          ..close();
+        canvas.drawPath(
+          arrowPath,
+          Paint()..color = paint.color,
+        );
+      }
+    }
+  }
+
+  ArrowDirection _directionBetween(GridPoint a, GridPoint b) {
+    if (b.row < a.row) return ArrowDirection.up;
+    if (b.row > a.row) return ArrowDirection.down;
+    if (b.col < a.col) return ArrowDirection.left;
+    return ArrowDirection.right;
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => true;
+}
+'''
+          screen.write_text(s[:start] + painter)
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/engine/arrow_puzzle_engine.dart lib/screens/arrow_game_screen.dart
+          git diff --cached --quiet || git commit -m "Make hard arrows long and bent [skip ci]"
+          git push

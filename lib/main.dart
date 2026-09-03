@@ -5,7 +5,15 @@ import 'services/ad_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await AdService.instance.initialize();
+
+  // Ads are optional. A slow/unavailable network must never prevent the game
+  // from starting, so offline gameplay remains available.
+  try {
+    await AdService.instance.initialize().timeout(const Duration(seconds: 4));
+  } catch (_) {
+    // Ignore ad initialization failures; gameplay is fully local.
+  }
+
   runApp(const ArrowGameApp());
 }
 
@@ -24,9 +32,22 @@ class _ArrowGameAppState extends State<ArrowGameApp> {
       debugShowCheckedModeBanner: false,
       title: 'Arrow Game',
       themeMode: _mode,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true, brightness: Brightness.light),
-      darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo, brightness: Brightness.dark), useMaterial3: true, brightness: Brightness.dark),
-      home: LevelSelectionScreen(onThemeChanged: (mode) => setState(() => _mode = mode)),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+        brightness: Brightness.light,
+      ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.indigo,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+      ),
+      home: LevelSelectionScreen(
+        onThemeChanged: (mode) => setState(() => _mode = mode),
+      ),
     );
   }
 }

@@ -282,7 +282,13 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
         child: Stack(children: [
           Column(children: [
             const SizedBox(height: 4),
-            Text('CLEAR\nTHE BOARD', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+            Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text('CLEAR', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+      Text('THE BOARD', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+    ],
+  ),
             const SizedBox(height: 10),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
               const SizedBox(width: 60),

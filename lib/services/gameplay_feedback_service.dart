@@ -8,13 +8,25 @@ class GameplayFeedbackService {
 
   bool soundEnabled = true;
   bool vibrationEnabled = true;
+  int lives = 3;
+
+  void resetLives() => lives = 3;
 
   Future<void> wrongMove() async {
+    // Every blocked tap costs one heart, but never below zero.
+    if (lives > 0) lives--;
+
     if (soundEnabled) {
+      // Two quick alert cues create a stronger "crack/break" feedback
+      // without requiring an external audio asset.
+      await SystemSound.play(SystemSoundType.alert);
+      await Future<void>.delayed(const Duration(milliseconds: 55));
       await SystemSound.play(SystemSoundType.alert);
     }
     if (vibrationEnabled) {
       await HapticFeedback.heavyImpact();
+      await Future<void>.delayed(const Duration(milliseconds: 45));
+      await HapticFeedback.mediumImpact();
     }
   }
 

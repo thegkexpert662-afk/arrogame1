@@ -1,10 +1,13 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 
-/// Lightweight gameplay feedback using Android/iOS system feedback.
-/// Keeps gameplay offline and avoids adding a network-dependent audio layer.
+/// Centralized gameplay audio + haptic feedback.
+/// Audio files are loaded from assets/sounds/.
 class GameplayFeedbackService {
   GameplayFeedbackService._();
   static final instance = GameplayFeedbackService._();
+
+  final AudioPlayer _player = AudioPlayer();
 
   bool soundEnabled = true;
   bool vibrationEnabled = true;
@@ -12,17 +15,21 @@ class GameplayFeedbackService {
 
   void resetLives() => lives = 3;
 
+  Future<void> _play(String file) async {
+    if (!soundEnabled) return;
+    try {
+      await _player.stop();
+      await _player.play(AssetSource('sounds/$file'));
+    } catch (_) {
+      // Keep gameplay working even if an optional sound asset is unavailable.
+    }
+  }
+
   Future<void> wrongMove() async {
-    // Every blocked tap costs one heart, but never below zero.
     if (lives > 0) lives--;
 
-    if (soundEnabled) {
-      // Two quick alert cues create a stronger "crack/break" feedback
-      // without requiring an external audio asset.
-      await SystemSound.play(SystemSoundType.alert);
-      await Future<void>.delayed(const Duration(milliseconds: 55));
-      await SystemSound.play(SystemSoundType.alert);
-    }
+    await _play('heart_break.wav');
+
     if (vibrationEnabled) {
       await HapticFeedback.heavyImpact();
       await Future<void>.delayed(const Duration(milliseconds: 45));
@@ -30,11 +37,9 @@ class GameplayFeedbackService {
     }
   }
 
-  /// Short click gives the cleared-arrow a quick "swipe/tap" response.
+  /// Plays when an arrow is successfully cleared.
   Future<void> clearArrow() async {
-    if (soundEnabled) {
-      await SystemSound.play(SystemSoundType.click);
-    }
+    await _play('swipe.wav');
     if (vibrationEnabled) {
       await HapticFeedback.selectionClick();
     }
@@ -42,12 +47,23 @@ class GameplayFeedbackService {
 
   Future<void> correctMove() => clearArrow();
 
+  /// Plays the level-complete sound and a stronger success vibration.
   Future<void> win() async {
-    if (soundEnabled) {
-      await SystemSound.play(SystemSoundType.click);
-    }
+    await _play('level_complete.wav');
     if (vibrationEnabled) {
       await HapticFeedback.mediumImpact();
+      await Future<void>.delayed(const Duration(milliseconds: 70));
+      await HapticFeedback.selectionClick();
     }
   }
+
+  /// Optional UI click feedback for buttons such as hint/pause/restart.
+  Future<void> click() async {
+    await _play('click.wav');
+    if (vibrationEnabled) {
+      await HapticFeedback.selectionClick();
+    }
+  }
+
+  Future<void> dispose() => _player.dispose();
 }

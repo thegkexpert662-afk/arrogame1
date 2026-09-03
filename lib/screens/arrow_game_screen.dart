@@ -22,10 +22,12 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   final ArrowPuzzleEngine _engine = ArrowPuzzleEngine();
   final _feedback = GameplayFeedbackService.instance;
   final _ads = AdService.instance;
+
   late ArrowPuzzle _puzzle;
-  late GridPoint _player;
-  final List<GridPoint> _visited = [];
-  final Set<GridPoint> _hintPath = {};
+  late List<GridPoint> _solution;
+  final Set<GridPoint> _cleared = <GridPoint>{};
+  final Set<GridPoint> _hintPath = <GridPoint>{};
+
   Timer? _timer;
   int _seconds = 0;
   int _moves = 0;
@@ -37,17 +39,19 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   bool _paused = false;
   bool _showFullSolution = false;
   bool _rewardAdLoading = false;
-  String _message = 'Follow the arrows to reach FINISH';
+  String _message = 'Tap arrows to clear the board';
   late AnimationController _winController;
 
   int get _difficulty => min(10, ((widget.level - 1) ~/ 100) + 1);
+  int get _totalArrows => _puzzle.cells.where((c) => c.arrows.isNotEmpty).length;
+  int get _remaining => _totalArrows - _cleared.length;
 
   @override
   void initState() {
     super.initState();
     _winController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 650),
     );
     _loadLevel();
   }
@@ -73,20 +77,16 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   void _newPuzzle() {
     _timer?.cancel();
     final random = Random(widget.level * 1000003 + _difficulty);
-    _puzzle = ArrowPuzzleEngine(random: random).generate(
-      difficulty: _difficulty,
-    );
-    _player = _puzzle.start;
-    _visited
-      ..clear()
-      ..add(_player);
+    _puzzle = ArrowPuzzleEngine(random: random).generate(difficulty: _difficulty);
+    _solution = _engine.findSolutionPath(_puzzle) ?? <GridPoint>[];
+    _cleared.clear();
     _hintPath.clear();
     _seconds = 0;
     _moves = 0;
     _finished = false;
     _paused = false;
     _showFullSolution = false;
-    _message = 'Follow the arrows to reach FINISH';
+    _message = 'Tap arrows to clear the board';
     _winController.reset();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && !_finished && !_paused) {
@@ -97,7 +97,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
 
   int _score() => max(
         100,
-        1000 + (_difficulty * 250) - (_moves * 8) - (_seconds * 2),
+        1000 + (_difficulty * 250) - (_moves * 5) - (_seconds * 2),
       );
 
   Future<void> _completeLevel() async {
@@ -127,63 +127,49 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           children: [
             Text('Level ${widget.level} • ${_difficultyName()}'),
             const SizedBox(height: 10),
-            Text(
-              'Score: $score',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
+            Text('Score: $score', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
             Text('Time: ${_formatTime(_seconds)}'),
             Text('Moves: $_moves'),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _restart();
-            },
-            child: const Text('REPLAY'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('LEVELS'),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); _restart(); }, child: const Text('REPLAY')),
+          FilledButton(onPressed: () { Navigator.pop(context); Navigator.pop(context); }, child: const Text('LEVELS')),
         ],
       ),
     );
   }
 
-  void _restart() => setState(_newPuzzle);
+  Future<void> _tapArrow(GridPoint point) async {
+    if (_finished || _paused || _cleared.contains(point)) return;
+    final cell = _puzzle.cellAt(point);
+    if (cell.arrows.isEmpty) return;
 
-  Future<void> _tapCell(GridPoint target) async {
-    if (_finished || _paused || target == _player) return;
-    final rowDelta = target.row - _player.row;
-    final colDelta = target.col - _player.col;
-    if (rowDelta.abs() + colDelta.abs() != 1) {
-      setState(() => _message = 'Tap the next arrow cell');
-      return;
-    }
-
-    final direction = _directionFor(_player, target);
-    if (!_engine.canMove(_puzzle, _player, direction)) {
+    if (!_engine.canClear(_puzzle, point, _cleared)) {
       await _feedback.wrongMove();
       if (!mounted) return;
-      setState(() => _message = '❌ Wrong direction! Try another route.');
+      setState(() => _message = '🔒 That arrow is blocked. Clear the arrow in its path first.');
       return;
     }
 
     await _feedback.correctMove();
     if (!mounted) return;
     setState(() {
-      _player = target;
-      _visited.add(target);
-      _hintPath.remove(target);
+      _cleared.add(point);
+      _hintPath.remove(point);
       _moves++;
-      _message = target == _puzzle.finish ? '🎉 Level complete!' : '✓ Good move!';
+      _message = _remaining <= 1 ? '✨ One more arrow!' : '✓ Cleared! Find the next free arrow';
     });
-    if (target == _puzzle.finish) await _completeLevel();
+
+    if (_cleared.length >= _totalArrows) {
+      await _completeLevel();
+    }
+  }
+
+  bool _consumeHint() {
+    if (_freeHints <= 0) return false;
+    setState(() => _freeHints--);
+    return true;
   }
 
   Future<void> _showHintMenu() async {
@@ -191,104 +177,62 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     await showModalBottomSheet<void>(
       context: context,
       builder: (sheetContext) => SafeArea(
-        child: Wrap(
-          children: [
-            const ListTile(
-              title: Text(
-                '💡 Hint System',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.arrow_forward),
-              title: const Text('Next correct move'),
-              subtitle: Text('Free hints: $_freeHints'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _nextMoveHint();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.route),
-              title: const Text('Correct path highlight'),
-              subtitle: const Text('Shows the route from your position'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _pathHint();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.lightbulb),
-              title: const Text('Full solution hint'),
-              subtitle: const Text('Costs 5 coins'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _fullSolutionHint();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.ondemand_video),
-              title: const Text('Reward Ad → Hint'),
-              subtitle: const Text('+1 hint after watching the ad'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _rewardAdHint();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.monetization_on_outlined),
-              title: const Text('Reward Ad → Coins'),
-              subtitle: const Text('+20 coins after watching the ad'),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _rewardAdCoins();
-              },
-            ),
-          ],
-        ),
+        child: Wrap(children: [
+          const ListTile(title: Text('💡 Helpful Hints', style: TextStyle(fontWeight: FontWeight.bold))),
+          ListTile(
+            leading: const Icon(Icons.lightbulb_outline),
+            title: const Text('Next free arrow'),
+            subtitle: Text('Free hints: $_freeHints'),
+            onTap: () { Navigator.pop(sheetContext); _nextHint(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.route),
+            title: const Text('Show clear path'),
+            subtitle: const Text('Highlights a valid clearing order'),
+            onTap: () { Navigator.pop(sheetContext); _pathHint(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.lightbulb),
+            title: const Text('Full solution'),
+            subtitle: const Text('Costs 5 coins'),
+            onTap: () { Navigator.pop(sheetContext); _fullSolutionHint(); },
+          ),
+          ListTile(
+            leading: const Icon(Icons.ondemand_video),
+            title: const Text('Reward Ad → Hint'),
+            subtitle: const Text('+1 hint after watching the ad'),
+            onTap: () { Navigator.pop(sheetContext); _rewardAdHint(); },
+          ),
+        ]),
       ),
     );
   }
 
-  bool _consumeHint() {
-    if (_freeHints > 0) {
-      setState(() => _freeHints--);
-      return true;
-    }
-    return false;
-  }
-
-  void _nextMoveHint() {
+  void _nextHint() {
     if (!_consumeHint()) {
-      setState(() => _message = 'No free hints left. Use coins or Reward Ad.');
+      setState(() => _message = 'No free hints left.');
       return;
     }
-    final index = _puzzle.solution.indexOf(_player);
-    if (index >= 0 && index + 1 < _puzzle.solution.length) {
-      final next = _puzzle.solution[index + 1];
+    final next = _solution.where((p) => !_cleared.contains(p)).firstOrNull;
+    if (next != null) {
       setState(() {
-        _hintPath
-          ..clear()
-          ..add(next);
-        _message = '💡 Hint: highlighted cell is your next move';
+        _hintPath..clear()..add(next);
+        _message = '💡 Highlighted arrow can be cleared now';
       });
     }
   }
 
   void _pathHint() {
     if (!_consumeHint()) {
-      setState(() => _message = 'No free hints left. Use coins or Reward Ad.');
+      setState(() => _message = 'No free hints left.');
       return;
     }
-    final index = _puzzle.solution.indexOf(_player);
-    if (index >= 0) {
-      setState(() {
-        _hintPath
-          ..clear()
-          ..addAll(_puzzle.solution.skip(index + 1));
-        _message = '💡 Correct path highlighted';
-      });
-    }
+    setState(() {
+      _hintPath
+        ..clear()
+        ..addAll(_solution.where((p) => !_cleared.contains(p)));
+      _message = '💡 Valid clearing order highlighted';
+    });
   }
 
   void _fullSolutionHint() {
@@ -301,54 +245,23 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       _showFullSolution = true;
       _hintPath
         ..clear()
-        ..addAll(_puzzle.solution);
-      _message = '💡 Full solution highlighted';
+        ..addAll(_solution.where((p) => !_cleared.contains(p)));
+      _message = '💡 Full clearing path highlighted';
     });
   }
 
   Future<void> _rewardAdHint() async {
     if (_rewardAdLoading) return;
-    setState(() {
-      _rewardAdLoading = true;
-      _message = 'Loading Reward Ad…';
+    setState(() { _rewardAdLoading = true; _message = 'Loading Reward Ad…'; });
+    final shown = await _ads.showRewarded(onReward: (_) {
+      if (!mounted) return;
+      final next = _solution.where((p) => !_cleared.contains(p)).firstOrNull;
+      setState(() {
+        _freeHints++;
+        if (next != null) _hintPath..clear()..add(next);
+        _message = '🎁 +1 hint!';
+      });
     });
-    final shown = await _ads.showRewarded(
-      onReward: (_) {
-        if (!mounted) return;
-        final index = _puzzle.solution.indexOf(_player);
-        setState(() {
-          _freeHints++;
-          if (index >= 0 && index + 1 < _puzzle.solution.length) {
-            _hintPath
-              ..clear()
-              ..add(_puzzle.solution[index + 1]);
-          }
-          _message = '🎁 +1 hint!';
-        });
-      },
-    );
-    if (!mounted) return;
-    setState(() {
-      _rewardAdLoading = false;
-      if (!shown) _message = 'Reward Ad is not ready. Please try again shortly.';
-    });
-  }
-
-  Future<void> _rewardAdCoins() async {
-    if (_rewardAdLoading) return;
-    setState(() {
-      _rewardAdLoading = true;
-      _message = 'Loading Reward Ad…';
-    });
-    final shown = await _ads.showRewarded(
-      onReward: (_) {
-        if (!mounted) return;
-        setState(() {
-          _coins += 20;
-          _message = '🎁 +20 coins!';
-        });
-      },
-    );
     if (!mounted) return;
     setState(() {
       _rewardAdLoading = false;
@@ -359,16 +272,10 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   Future<void> _pauseResume() async {
     if (_finished) return;
     if (_paused) {
-      setState(() {
-        _paused = false;
-        _message = 'Game resumed';
-      });
+      setState(() { _paused = false; _message = 'Game resumed'; });
       return;
     }
-    setState(() {
-      _paused = true;
-      _message = 'Game paused';
-    });
+    setState(() { _paused = true; _message = 'Game paused'; });
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -376,24 +283,14 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
         title: const Text('⏸ Paused'),
         content: const Text('Your timer is paused.'),
         actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _restart();
-            },
-            child: const Text('RESTART'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              if (mounted) setState(() => _paused = false);
-            },
-            child: const Text('RESUME'),
-          ),
+          TextButton(onPressed: () { Navigator.pop(context); _restart(); }, child: const Text('RESTART')),
+          FilledButton(onPressed: () { Navigator.pop(context); if (mounted) setState(() => _paused = false); }, child: const Text('RESUME')),
         ],
       ),
     );
   }
+
+  void _restart() => setState(_newPuzzle);
 
   String _difficultyName() {
     if (widget.level <= 25) return 'EASY';
@@ -405,408 +302,161 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   String _formatTime(int seconds) =>
       '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
 
-  ArrowDirection _directionFor(GridPoint from, GridPoint to) {
-    final dr = to.row - from.row;
-    final dc = to.col - from.col;
-    if (dr == -1) return ArrowDirection.up;
-    if (dr == 1) return ArrowDirection.down;
-    if (dc == -1) return ArrowDirection.left;
-    return ArrowDirection.right;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F8F6),
+      backgroundColor: const Color(0xFFF8F5EA),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF8F8F6),
+        backgroundColor: const Color(0xFFF8F5EA),
         elevation: 0,
-        leading: IconButton(
-          tooltip: 'Back',
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 22),
-        ),
-        title: Text(
-          'Level ${widget.level}',
-          style: const TextStyle(fontWeight: FontWeight.w700),
-        ),
+        leading: IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.arrow_back_ios_new_rounded)),
+        title: Text('Level ${widget.level}', style: const TextStyle(fontWeight: FontWeight.w800)),
         centerTitle: true,
         actions: [
-          IconButton(
-            tooltip: 'Hint',
-            onPressed: _showHintMenu,
-            icon: const Icon(Icons.lightbulb_outline_rounded),
-          ),
-          IconButton(
-            tooltip: _paused ? 'Resume' : 'Pause',
-            onPressed: _pauseResume,
-            icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
-          ),
-          IconButton(
-            tooltip: 'Restart',
-            onPressed: _restart,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
+          IconButton(onPressed: _showHintMenu, icon: const Icon(Icons.lightbulb_outline_rounded)),
+          IconButton(onPressed: _pauseResume, icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded)),
+          IconButton(onPressed: _restart, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
       body: SafeArea(
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                const SizedBox(height: 4),
-                Text(
-                  'CLEAR THE BOARD',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 27,
-                    letterSpacing: 1.4,
-                    fontWeight: FontWeight.w800,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const SizedBox(width: 56),
-                    Text(
-                      'Level ${widget.level}',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: IconButton(
-                        onPressed: _showHintMenu,
-                        icon: const Icon(Icons.settings_outlined),
-                      ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 2),
-                  child: Row(
-                    children: [
-                      _InfoPill(icon: Icons.arrow_forward_rounded, text: '$_moves'),
-                      const Spacer(),
-                      const Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 25),
-                      const SizedBox(width: 5),
-                      const Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 25),
-                      const SizedBox(width: 5),
-                      const Icon(Icons.favorite_rounded, color: Colors.redAccent, size: 25),
-                      const Spacer(),
-                      _InfoPill(text: _difficultyName()),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 3),
-                  child: Row(
-                    children: [
-                      Text('⏱ ${_formatTime(_seconds)}'),
-                      const Spacer(),
-                      Text('🪙 $_coins', style: const TextStyle(fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-                Expanded(
+        child: Stack(children: [
+          Column(children: [
+            const SizedBox(height: 5),
+            Text('CLEAR\nTHE BOARD', textAlign: TextAlign.center, style: TextStyle(fontSize: 34, height: .95, fontWeight: FontWeight.w900, color: scheme.onSurface)),
+            const SizedBox(height: 10),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              const SizedBox(width: 70),
+              Text('Level ${widget.level}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+              Padding(padding: const EdgeInsets.only(right: 12), child: IconButton(onPressed: _showHintMenu, icon: const Icon(Icons.settings_outlined))),
+            ]),
+            Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children: [
+              _Pill(icon: Icons.arrow_forward_rounded, text: '$_remaining'),
+              const Spacer(),
+              const Text('♥ ♥ ♥', style: TextStyle(fontSize: 24, color: Colors.redAccent, letterSpacing: 3)),
+              const Spacer(),
+              _Pill(text: _difficultyName()),
+            ])),
+            Padding(padding: const EdgeInsets.fromLTRB(18, 8, 18, 0), child: Row(children: [
+              Text('⏱ ${_formatTime(_seconds)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const Spacer(),
+              Text('🪙 $_coins', style: const TextStyle(fontWeight: FontWeight.w700)),
+            ])),
+            Expanded(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: _puzzle.columns / _puzzle.rows,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        return Center(
-                          child: AspectRatio(
-                            aspectRatio: _puzzle.columns / _puzzle.rows,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTapUp: (details) {
-                                final box = context.findRenderObject() as RenderBox;
-                                final local = box.globalToLocal(details.globalPosition);
-                                final cellWidth = box.size.width / _puzzle.columns;
-                                final cellHeight = box.size.height / _puzzle.rows;
-                                final col = (local.dx / cellWidth).floor();
-                                final row = (local.dy / cellHeight).floor();
-                                if (row >= 0 && row < _puzzle.rows && col >= 0 && col < _puzzle.columns) {
-                                  _tapCell(GridPoint(row, col));
-                                }
-                              },
-                              child: CustomPaint(
-                                painter: _ArrowBoardPainter(
-                                  puzzle: _puzzle,
-                                  player: _player,
-                                  visited: _visited.toSet(),
-                                  hints: _hintPath,
-                                  showFullSolution: _showFullSolution,
-                                  primary: Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                    padding: const EdgeInsets.all(12),
+                    child: CustomPaint(
+                      painter: _ArrowBoardPainter(
+                        puzzle: _puzzle,
+                        cleared: _cleared,
+                        hints: _hintPath,
+                        showFullSolution: _showFullSolution,
+                      ),
+                      child: GridView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _puzzle.rows * _puzzle.columns,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _puzzle.columns),
+                        itemBuilder: (_, index) {
+                          final point = GridPoint(index ~/ _puzzle.columns, index % _puzzle.columns);
+                          final hasArrow = _puzzle.cellAt(point).arrows.isNotEmpty;
+                          return GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: hasArrow ? () => _tapArrow(point) : null,
+                            child: const SizedBox.expand(),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
-                Text(
-                  _message,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _RoundAction(
-                      icon: Icons.lightbulb_outline_rounded,
-                      badge: _freeHints,
-                      onTap: _showHintMenu,
-                    ),
-                    const SizedBox(width: 28),
-                    _RoundAction(
-                      icon: Icons.grid_3x3_rounded,
-                      onTap: _restart,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Best ${_bestTime == null ? '--:--' : _formatTime(_bestTime!)}  •  $_bestScore pts',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                const SizedBox(height: 8),
-              ],
+              ),
             ),
-            if (_finished)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: AnimatedBuilder(
-                    animation: _winController,
-                    builder: (_, __) => Center(
-                      child: Transform.scale(
-                        scale: 1 + (_winController.value * .25),
-                        child: Opacity(
-                          opacity: 1 - (_winController.value * .15),
-                          child: const Icon(Icons.celebration, size: 110),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            if (_paused) Positioned.fill(child: Container(color: Colors.black26)),
-            if (_rewardAdLoading)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black12,
-                  child: const Center(
-                    child: Card(
-                      child: Padding(
-                        padding: EdgeInsets.all(18),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                            SizedBox(width: 12),
-                            Text('Loading ad…'),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+            Text(_message, textAlign: TextAlign.center, style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+            Padding(padding: const EdgeInsets.fromLTRB(24, 8, 24, 18), child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+              _RoundButton(icon: Icons.lightbulb_outline_rounded, badge: _freeHints, onTap: _showHintMenu),
+              _RoundButton(icon: Icons.grid_3x3_rounded, onTap: _restart),
+            ])),
+            Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Best ${_bestTime == null ? '--:--' : _formatTime(_bestTime!)}  •  Score $_bestScore', style: TextStyle(color: scheme.onSurfaceVariant))),
+          ]),
+          if (_finished) Positioned.fill(child: IgnorePointer(child: AnimatedBuilder(animation: _winController, builder: (_, __) => Center(child: Transform.scale(scale: 1 + _winController.value * .2, child: Opacity(opacity: 1 - _winController.value * .1, child: const Icon(Icons.celebration, size: 110))))))),
+          if (_paused) const Positioned.fill(child: ColoredBox(color: Colors.black26)),
+          if (_rewardAdLoading) const Positioned.fill(child: ColoredBox(color: Colors.black12)),
+        ]),
       ),
     );
   }
 }
 
-class _InfoPill extends StatelessWidget {
-  const _InfoPill({this.icon, required this.text});
+class _Pill extends StatelessWidget {
+  const _Pill({this.icon, required this.text});
   final IconData? icon;
   final String text;
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: .55),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 19),
-            const SizedBox(width: 6),
-          ],
-          Text(text, style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+        decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(14)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [if (icon != null) Icon(icon, size: 17), if (icon != null) const SizedBox(width: 5), Text(text, style: const TextStyle(fontWeight: FontWeight.w700))]),
+      );
 }
 
-class _RoundAction extends StatelessWidget {
-  const _RoundAction({required this.icon, required this.onTap, this.badge});
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({required this.icon, this.badge, this.onTap});
   final IconData icon;
-  final VoidCallback onTap;
   final int? badge;
-
+  final VoidCallback? onTap;
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          elevation: 2,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: SizedBox(
-              width: 66,
-              height: 66,
-              child: Icon(icon, size: 31, color: Theme.of(context).colorScheme.primary),
-            ),
-          ),
-        ),
-        if (badge != null && badge! > 0)
-          Positioned(
-            right: -2,
-            top: -4,
-            child: CircleAvatar(
-              radius: 13,
-              child: Text('$badge', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-            ),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Stack(clipBehavior: Clip.none, children: [
+        Material(color: Colors.white, elevation: 4, shape: const CircleBorder(), child: InkWell(onTap: onTap, customBorder: const CircleBorder(), child: SizedBox(width: 76, height: 76, child: Icon(icon, size: 34, color: Theme.of(context).colorScheme.primary)))),
+        if (badge != null) Positioned(right: -2, top: -4, child: CircleAvatar(radius: 14, child: Text('$badge', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)))),
+      ]);
 }
 
 class _ArrowBoardPainter extends CustomPainter {
-  const _ArrowBoardPainter({
-    required this.puzzle,
-    required this.player,
-    required this.visited,
-    required this.hints,
-    required this.showFullSolution,
-    required this.primary,
-  });
-
+  const _ArrowBoardPainter({required this.puzzle, required this.cleared, required this.hints, required this.showFullSolution});
   final ArrowPuzzle puzzle;
-  final GridPoint player;
-  final Set<GridPoint> visited;
+  final Set<GridPoint> cleared;
   final Set<GridPoint> hints;
   final bool showFullSolution;
-  final Color primary;
 
   @override
   void paint(Canvas canvas, Size size) {
     final cellW = size.width / puzzle.columns;
     final cellH = size.height / puzzle.rows;
-
-    final dotPaint = Paint()
-      ..color = const Color(0xFFD3D6D8)
-      ..style = PaintingStyle.fill;
-    final linePaint = Paint()
-      ..color = const Color(0xFF10245B)
-      ..strokeWidth = max(3.0, min(cellW, cellH) * .075)
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..style = PaintingStyle.stroke;
-    final visitedPaint = Paint()
-      ..color = primary.withValues(alpha: .22)
-      ..strokeWidth = max(5.0, min(cellW, cellH) * .11)
-      ..strokeCap = StrokeCap.round;
-    final hintPaint = Paint()
-      ..color = const Color(0xFF58B8FF)
-      ..strokeWidth = max(5.0, min(cellW, cellH) * .12)
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
+    final dots = Paint()..color = const Color(0xFFD5D8D9);
     for (var r = 0; r < puzzle.rows; r++) {
       for (var c = 0; c < puzzle.columns; c++) {
-        canvas.drawCircle(Offset((c + .5) * cellW, (r + .5) * cellH), 2.5, dotPaint);
+        canvas.drawCircle(Offset((c + .5) * cellW, (r + .5) * cellH), 2.4, dots);
       }
     }
 
-    Offset center(GridPoint p) => Offset((p.col + .5) * cellW, (p.row + .5) * cellH);
-
-    // Draw the visited route underneath the arrows.
-    for (var i = 0; i < puzzle.solution.length - 1; i++) {
-      final a = puzzle.solution[i];
-      final b = puzzle.solution[i + 1];
-      if (visited.contains(a) && visited.contains(b)) {
-        canvas.drawLine(center(a), center(b), visitedPaint);
-      }
-    }
-
-    // Draw each directed segment with a clean rounded line and arrowhead.
     for (final cell in puzzle.cells) {
-      final from = GridPoint(cell.row, cell.col);
-      for (final direction in cell.arrows) {
-        final to = from.move(direction);
-        if (!puzzle.contains(to)) continue;
-        final a = center(from);
-        final b = center(to);
-        final isHint = hints.contains(from) || hints.contains(to) ||
-            (showFullSolution && puzzle.solution.contains(from));
-        final paint = isHint ? hintPaint : linePaint;
-        canvas.drawLine(a, b, paint);
-        _drawArrowHead(canvas, b, direction, paint);
-      }
+      final point = GridPoint(cell.row, cell.col);
+      if (cell.arrows.isEmpty || cleared.contains(point)) continue;
+      final direction = cell.arrows.first;
+      final center = Offset((cell.col + .5) * cellW, (cell.row + .5) * cellH);
+      final dx = direction.colDelta * cellW;
+      final dy = direction.rowDelta * cellH;
+      final start = center - Offset(dx * .46, dy * .46);
+      final end = center + Offset(dx * .40, dy * .40);
+      final isHint = hints.contains(point) || showFullSolution && hints.contains(point);
+      final paint = Paint()..color = isHint ? const Color(0xFF1E9BEF) : const Color(0xFF111E59)..strokeWidth = max(3.0, min(cellW, cellH) * .10)..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+      if (isHint) paint.strokeWidth = max(4.0, min(cellW, cellH) * .13);
+      canvas.drawLine(start, end, paint);
+      final ux = dx == 0 ? 0.0 : dx.sign;
+      final uy = dy == 0 ? 0.0 : dy.sign;
+      final perp = Offset(-uy, ux);
+      final tip = end;
+      final back = end - Offset(ux, uy) * min(cellW, cellH) * .22;
+      final side = Offset(perp.dx, perp.dy) * min(cellW, cellH) * .13;
+      final path = Path()..moveTo(tip.dx, tip.dy)..lineTo(back.dx + side.dx, back.dy + side.dy)..lineTo(back.dx - side.dx, back.dy - side.dy)..close();
+      final fill = Paint()..color = paint.color..style = PaintingStyle.fill;
+      canvas.drawPath(path, fill);
     }
-
-    // Start marker and finish marker, kept subtle like the reference UI.
-    final start = center(puzzle.start);
-    final finish = center(puzzle.finish);
-    final markerPaint = Paint()..color = primary;
-    canvas.drawCircle(start, max(5, min(cellW, cellH) * .11), markerPaint);
-    final finishPaint = Paint()
-      ..color = const Color(0xFF45B66A)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-    canvas.drawCircle(finish, max(6, min(cellW, cellH) * .13), finishPaint);
-
-    if (player != puzzle.start && player != puzzle.finish) {
-      canvas.drawCircle(center(player), max(4, min(cellW, cellH) * .08), markerPaint);
-    }
-  }
-
-  void _drawArrowHead(Canvas canvas, Offset tip, ArrowDirection direction, Paint base) {
-    final length = 9.0;
-    final width = 6.0;
-    final vector = switch (direction) {
-      ArrowDirection.up => const Offset(0, -1),
-      ArrowDirection.down => const Offset(0, 1),
-      ArrowDirection.left => const Offset(-1, 0),
-      ArrowDirection.right => const Offset(1, 0),
-    };
-    final side = Offset(-vector.dy, vector.dx);
-    final p1 = tip - vector * length + side * width;
-    final p2 = tip - vector * length - side * width;
-    final path = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(p1.dx, p1.dy)
-      ..lineTo(p2.dx, p2.dy)
-      ..close();
-    final fill = Paint()
-      ..color = base.color
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(path, fill);
   }
 
   @override
-  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) =>
-      oldDelegate.puzzle != puzzle ||
-      oldDelegate.player != player ||
-      oldDelegate.visited.length != visited.length ||
-      oldDelegate.hints.length != hints.length ||
-      oldDelegate.showFullSolution != showFullSolution ||
-      oldDelegate.primary != primary;
+  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => oldDelegate.cleared != cleared || oldDelegate.hints != hints || oldDelegate.showFullSolution != showFullSolution;
 }

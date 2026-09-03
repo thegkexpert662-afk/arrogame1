@@ -1,8 +1,7 @@
 import 'package:flutter/services.dart';
 
-/// Lightweight gameplay feedback without adding another package.
-/// Sound is represented by system UI feedback; a real audio asset layer can
-/// be plugged in later without changing the game screen API.
+/// Lightweight gameplay feedback using Android/iOS system feedback.
+/// Keeps gameplay offline and avoids adding a network-dependent audio layer.
 class GameplayFeedbackService {
   GameplayFeedbackService._();
   static final instance = GameplayFeedbackService._();
@@ -11,17 +10,30 @@ class GameplayFeedbackService {
   bool vibrationEnabled = true;
 
   Future<void> wrongMove() async {
-    if (soundEnabled) await SystemSound.play(SystemSoundType.alert);
-    if (vibrationEnabled) await HapticFeedback.heavyImpact();
+    if (soundEnabled) {
+      await SystemSound.play(SystemSoundType.alert);
+    }
+    if (vibrationEnabled) {
+      await HapticFeedback.heavyImpact();
+    }
   }
 
-  Future<void> correctMove() async {
-    if (soundEnabled) await SystemSound.play(SystemSoundType.click);
-    if (vibrationEnabled) await HapticFeedback.selectionClick();
+  /// Short click gives the cleared-arrow a quick "swipe/tap" response.
+  Future<void> clearArrow() async {
+    if (soundEnabled) {
+      await SystemSound.play(SystemSoundType.click);
+    }
+    if (vibrationEnabled) {
+      await HapticFeedback.selectionClick();
+    }
   }
+
+  Future<void> correctMove() => clearArrow();
 
   Future<void> win() async {
-    if (soundEnabled) await SystemSound.play(SystemSoundType.click);
+    if (soundEnabled) {
+      await SystemSound.play(SystemSoundType.click);
+    }
     if (vibrationEnabled) {
       await HapticFeedback.mediumImpact();
     }

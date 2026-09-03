@@ -65,6 +65,10 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       vsync: this,
       duration: const Duration(milliseconds: 430),
     );
+
+    // The first Flutter build happens immediately after initState. Generate
+    // the puzzle synchronously so the late field is initialized before build.
+    _newPuzzle();
     _loadLevel();
   }
 

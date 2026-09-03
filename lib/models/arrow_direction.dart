@@ -27,16 +27,18 @@ extension ArrowDirectionX on ArrowDirection {
     }
   }
 
+  /// Visual arrow used by the puzzle board. The line makes the board look
+  /// like a clean arrow-maze instead of a grid of standalone arrow icons.
   String get symbol {
     switch (this) {
       case ArrowDirection.up:
-        return '↑';
+        return '│↑';
       case ArrowDirection.down:
-        return '↓';
+        return '↓│';
       case ArrowDirection.left:
-        return '←';
+        return '←─';
       case ArrowDirection.right:
-        return '→';
+        return '─→';
     }
   }
 }

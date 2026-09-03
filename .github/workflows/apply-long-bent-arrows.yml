@@ -5,21 +5,29 @@ on:
   push:
     branches: [master]
 
+concurrency:
+  group: long-bent-arrow-painter
+  cancel-in-progress: false
+
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, 'Apply long bent arrow board') }}
+    if: ${{ !contains(github.event.head_commit.message || '', 'Apply long bent arrow board') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
       - name: Replace board painter with long bent paths
         shell: python
         run: |
           from pathlib import Path
           path = Path('lib/screens/arrow_game_screen.dart')
-          text = path.read_text()
+          text = path.read_text(encoding='utf-8')
           marker = 'class _ArrowBoardPainter extends CustomPainter {'
+          if marker not in text:
+              raise SystemExit('Painter marker not found')
+
           start = text.index(marker)
           replacement = r'''class _ArrowBoardPainter extends CustomPainter {
   _ArrowBoardPainter({
@@ -48,9 +56,15 @@ jobs:
   @override
   void paint(Canvas canvas, Size size) {
     if (puzzle.rows <= 0 || puzzle.columns <= 0) return;
+
     final w = size.width / puzzle.columns;
     final h = size.height / puzzle.rows;
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFF8F5EA));
+    final baseColor = const Color(0xFF102A43);
+
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = const Color(0xFFF8F5EA),
+    );
 
     for (var row = 0; row < puzzle.rows; row++) {
       for (var col = 0; col < puzzle.columns; col++) {
@@ -59,51 +73,65 @@ jobs:
         if (cell.arrows.isEmpty || cleared.contains(origin)) continue;
 
         final points = puzzle.paths[origin] ?? <GridPoint>[origin];
-        if (points.isEmpty) continue;
+        if (points.length < 2) continue;
+
         final isHint = hints.contains(origin);
         final isWrong = wrongPoint == origin;
         final isClearing = clearingPoint == origin;
-        final paint = Paint()
+        var strokeColor = baseColor;
+        if (isHint) strokeColor = Colors.amber.shade700;
+        if (isWrong) strokeColor = Colors.redAccent;
+
+        final stroke = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = min(w, h) * 0.16
+          ..strokeWidth = min(w, h) * 0.15
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
-          ..color = isHint
-              ? Colors.amber.shade700
-              : isWrong
-                  ? Colors.redAccent
-                  : const Color(0xFF102A43);
+          ..color = strokeColor;
 
-        if (isWrong) paint.strokeWidth *= 1 + sin(wrongProgress * pi) * .25;
+        if (isWrong) {
+          stroke.strokeWidth *= 1 + sin(wrongProgress * pi) * .25;
+        }
         if (isClearing) {
-          paint.strokeWidth *= 1 - clearProgress * .55;
-          paint.color = const Color(0xFF102A43).withValues(alpha: 1 - clearProgress);
+          stroke.strokeWidth *= 1 - clearProgress * .55;
+          stroke.color = baseColor.withValues(alpha: 1 - clearProgress);
         }
 
-        final line = Path();
+        final path = Path();
         final first = _center(points.first, w, h);
-        line.moveTo(first.dx, first.dy);
-        for (final p in points.skip(1)) {
-          final q = _center(p, w, h);
-          line.lineTo(q.dx, q.dy);
+        path.moveTo(first.dx, first.dy);
+        for (final point in points.skip(1)) {
+          final p = _center(point, w, h);
+          path.lineTo(p.dx, p.dy);
         }
-        canvas.drawPath(line, paint);
+        canvas.drawPath(path, stroke);
 
         final tipPoint = points.last;
-        final beforeTip = points.length > 1 ? points[points.length - 2] : origin;
+        final beforePoint = points[points.length - 2];
         final tip = _center(tipPoint, w, h);
-        final before = _center(beforeTip, w, h);
+        final before = _center(beforePoint, w, h);
         final delta = tip - before;
-        if (delta.distance == 0) continue;
-        final unit = delta / delta.distance;
+        final distance = delta.distance;
+        if (distance == 0) continue;
+
+        final unit = delta / distance;
         final side = Offset(-unit.dy, unit.dx);
         final head = min(w, h) * .34;
-        final arrow = Path()
-          ..moveTo(tip.dx + unit.dx * head * .55, tip.dy + unit.dy * head * .55)
-          ..lineTo(tip.dx - unit.dx * head + side.dx * head * .62, tip.dy - unit.dy * head + side.dy * head * .62)
-          ..lineTo(tip.dx - unit.dx * head - side.dx * head * .62, tip.dy - unit.dy * head - side.dy * head * .62)
+        final tipForward = tip + unit * (head * .58);
+        final left = tip - unit * head + side * (head * .62);
+        final right = tip - unit * head - side * (head * .62);
+
+        final headPath = Path()
+          ..moveTo(tipForward.dx, tipForward.dy)
+          ..lineTo(left.dx, left.dy)
+          ..lineTo(right.dx, right.dy)
           ..close();
-        canvas.drawPath(arrow, Paint()..style = PaintingStyle.fill..color = paint.color);
+        canvas.drawPath(
+          headPath,
+          Paint()
+            ..style = PaintingStyle.fill
+            ..color = stroke.color,
+        );
       }
     }
   }
@@ -112,12 +140,19 @@ jobs:
   bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => true;
 }
 '''
-          path.write_text(text[:start] + replacement)
-      - name: Commit screen and remove patch workflow
+          if 'puzzle.paths[' in text and text.index('puzzle.paths[') > start:
+              print('Long-path painter already present; nothing to patch.')
+              raise SystemExit(0)
+          path.write_text(text[:start] + replacement, encoding='utf-8')
+
+      - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/screens/arrow_game_screen.dart
-          git rm .github/workflows/apply-long-bent-arrows.yml
+          if git diff --cached --quiet; then
+            echo "No painter changes to commit."
+            exit 0
+          fi
           git commit -m "Apply long bent arrow board"
           git push

@@ -31,9 +31,12 @@ class ArrowPuzzle {
       point.row >= 0 && point.row < rows && point.col >= 0 && point.col < columns;
 }
 
-/// Generates the connected-line "Tap to Clear" style used by the reference
-/// game: many separate short, bent arrow pieces with one arrow head at the tip.
-/// Levels 1-5 stay lighter; level 6+ uses a much denser, harder board.
+/// Generates a dense "Tap to Clear" arrow-board.
+///
+/// Hard difficulty intentionally fills a large part of the board with many
+/// arrows and long, frequently-bending visual paths. The actual blocking
+/// rules are still checked by [_isClearable], so every generated board has a
+/// valid solution.
 class ArrowPuzzleEngine {
   ArrowPuzzleEngine({Random? random}) : _random = random ?? Random();
 
@@ -49,11 +52,16 @@ class ArrowPuzzleEngine {
     final r = rows ?? size.$1;
     final c = columns ?? size.$2;
     final hard = d >= 6;
+
+    // Hard boards deliberately contain many more arrowheads. At level 1 the
+    // screen already maps to hard difficulty, so the first level is dense.
     final pieceCount = hard
-        ? min(r * c ~/ 3, 65 + d * 4)
+        ? min((r * c * 3) ~/ 5, 95 + d * 5)
         : min(r * c ~/ 4, 8 + d * 2);
 
-    for (var attempt = 0; attempt < 500; attempt++) {
+    // Dense random boards can need more attempts before a valid ordering is
+    // found. We never return an impossible puzzle.
+    for (var attempt = 0; attempt < 3000; attempt++) {
       final cells = List<ArrowCell>.generate(
         r * c,
         (index) => ArrowCell(row: index ~/ c, col: index % c),
@@ -72,14 +80,17 @@ class ArrowPuzzleEngine {
 
       for (final endpoint in candidates) {
         if (endpoints.length >= pieceCount) break;
+
         final directions = ArrowDirection.values.toList()..shuffle(_random);
         var placed = false;
 
         for (final direction in directions) {
-          final maxLength = hard ? 5 : min(5, 2 + (d ~/ 3));
-          final minLength = hard ? 3 : 2;
+          // Long pieces with bends make the board look like a tangled maze.
+          final minLength = hard ? 4 : 2;
+          final maxLength = hard ? 7 : min(5, 2 + (d ~/ 3));
           final length = minLength +
               _random.nextInt(max(1, maxLength - minLength + 1));
+
           final path = _buildPath(
             endpoint,
             direction,
@@ -102,7 +113,8 @@ class ArrowPuzzleEngine {
         if (placed) continue;
       }
 
-      if (endpoints.length < (hard ? pieceCount * 3 ~/ 4 : max(5, pieceCount ~/ 2))) {
+      if (endpoints.length <
+          (hard ? pieceCount * 9 ~/ 10 : max(5, pieceCount ~/ 2))) {
         continue;
       }
 
@@ -130,7 +142,6 @@ class ArrowPuzzleEngine {
     int columns,
     Set<GridPoint> used,
     {bool allowVisualOverlap = false}) {
-    // The line enters the arrow tip from the opposite direction.
     var current = endpoint.move(_opposite(arrowDirection));
     if (current.row < 0 ||
         current.row >= rows ||
@@ -138,7 +149,8 @@ class ArrowPuzzleEngine {
         current.col >= columns) {
       return null;
     }
-    if (used.contains(endpoint) || (!allowVisualOverlap && used.contains(current))) {
+    if (used.contains(endpoint) ||
+        (!allowVisualOverlap && used.contains(current))) {
       return null;
     }
 
@@ -158,11 +170,12 @@ class ArrowPuzzleEngine {
               ArrowDirection.down,
             ];
 
-      // Hard boards deliberately prefer a bend at every short segment.
       final options = <ArrowDirection>[];
       if (allowVisualOverlap) {
+        // Strongly prefer bends so the visible pieces become tangled.
         options.addAll(perpendicular);
-        if (_random.nextInt(4) == 0) options.addAll(straight);
+        options.addAll(perpendicular);
+        if (_random.nextInt(5) == 0) options.addAll(straight);
       } else {
         options.addAll(straight);
         options.addAll(perpendicular);

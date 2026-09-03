@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch heart loss and restart
+      - name: Patch heart loss restart and hard levels
         shell: python
         run: |
           from pathlib import Path
@@ -36,11 +36,16 @@ jobs:
           if old_hearts in s:
               s = s.replace(old_hearts, new_hearts)
 
+          old_difficulty = "  int get _difficulty => min(10, ((widget.level - 1) ~/ 100) + 1);"
+          new_difficulty = "  int get _difficulty => widget.level <= 5 ? 2 : min(10, 6 + ((widget.level - 6) ~/ 100));"
+          if old_difficulty in s:
+              s = s.replace(old_difficulty, new_difficulty)
+
           p.write_text(s)
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/screens/arrow_game_screen.dart .github/workflows/apply-heart-restart.yml
-          git diff --cached --quiet || git commit -m "Make heart loss restart the current level"
+          git diff --cached --quiet || git commit -m "Make level 6+ hard and restart on heart loss"
           git push

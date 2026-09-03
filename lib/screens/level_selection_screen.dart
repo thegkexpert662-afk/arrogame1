@@ -75,7 +75,6 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
 
     final after = await PlayerProgressService.instance.dailyReward();
     if (!mounted) return;
-
     setState(() => _progress = after);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('🎁 Daily reward claimed! Streak ${after.streak}')),
@@ -236,6 +235,61 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
     );
   }
 
+  Widget _levelCard(int level) {
+    return FutureBuilder<bool>(
+      future: LevelProgressService.instance.isCompleted(level),
+      builder: (context, snapshot) {
+        final completed = snapshot.data ?? false;
+        final primary = Theme.of(context).colorScheme.primary;
+
+        return InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _openLevel(level),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            decoration: BoxDecoration(
+              color: completed
+                  ? primary.withValues(alpha: 0.10)
+                  : Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: completed
+                    ? primary.withValues(alpha: 0.45)
+                    : Theme.of(context).colorScheme.outline.withValues(alpha: 0.18),
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  completed ? Icons.check_circle : Icons.play_circle_fill,
+                  color: primary,
+                  size: 30,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$level',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _difficulty(level),
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -316,14 +370,14 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
                           ),
                         ),
                       ),
-                      Text('$_unlocked / $totalLevels unlocked'),
+                      Text('$_unlocked / $totalLevels'),
                     ],
                   ),
                 ),
                 Expanded(
                   child: GridView.builder(
                     padding: const EdgeInsets.all(14),
-                    itemCount: totalLevels,
+                    itemCount: _unlocked,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 4,
@@ -331,78 +385,7 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
                       crossAxisSpacing: 10,
                       childAspectRatio: 0.9,
                     ),
-                    itemBuilder: (context, index) {
-                      final level = index + 1;
-                      final unlocked = level <= _unlocked;
-
-                      return FutureBuilder<bool>(
-                        future: LevelProgressService.instance
-                            .isCompleted(level),
-                        builder: (context, snapshot) {
-                          final completed = snapshot.data ?? false;
-
-                          return InkWell(
-                            borderRadius: BorderRadius.circular(14),
-                            onTap: unlocked ? () => _openLevel(level) : null,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: unlocked
-                                    ? Theme.of(context).cardColor
-                                    : Theme.of(context).colorScheme.surfaceContainerHighest,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: unlocked
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.18)
-                                      : Theme.of(context)
-                                          .colorScheme
-                                          .outline
-                                          .withValues(alpha: 0.2),
-                                ),
-                              ),
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    unlocked
-                                        ? (completed
-                                            ? Icons.check_circle
-                                            : Icons.play_circle_fill)
-                                        : Icons.lock,
-                                    color: unlocked
-                                        ? Theme.of(context).colorScheme.primary
-                                        : Theme.of(context)
-                                            .colorScheme
-                                            .onSurfaceVariant,
-                                    size: 28,
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Text(
-                                    '$level',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 17,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    _difficulty(level),
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
+                    itemBuilder: (context, index) => _levelCard(index + 1),
                   ),
                 ),
               ],

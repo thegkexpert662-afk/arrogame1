@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch heart loss restart, hard levels, and safe arrow engine
+      - name: Patch heart loss restart, hard levels, safe arrow engine, and screen analyzer cleanup
         shell: python
         run: |
           from pathlib import Path
@@ -42,6 +42,15 @@ jobs:
           if old_difficulty in s:
               s = s.replace(old_difficulty, new_difficulty)
 
+          # Analyzer cleanup: findSolutionPath is non-nullable, so no null fallback is needed.
+          s = s.replace(
+              "    _solution = _engine.findSolutionPath(_puzzle) ?? <GridPoint>[];",
+              "    _solution = _engine.findSolutionPath(_puzzle);",
+          )
+
+          # Keep the title as an explicit escaped newline string.
+          s = s.replace("Text('CLEAR\\nTHE BOARD'", "Text('CLEAR\\nTHE BOARD'")
+
           p.write_text(s)
 
           # The legacy engine is kept as a compatibility path for tests and
@@ -56,5 +65,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/screens/arrow_game_screen.dart lib/engine/arrow_puzzle_engine.dart .github/workflows/apply-heart-restart.yml
-          git diff --cached --quiet || git commit -m "Apply safe dense arrow engine"
+          git diff --cached --quiet || git commit -m "Clean arrow game screen analyzer issues"
           git push

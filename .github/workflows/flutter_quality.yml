@@ -15,147 +15,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ensure long bent arrow painter is applied
-        shell: python
-        run: |
-          from pathlib import Path
-          path = Path('lib/screens/arrow_game_screen.dart')
-          text = path.read_text(encoding='utf-8')
-          marker = 'class _ArrowBoardPainter extends CustomPainter {'
-          if marker not in text:
-              raise SystemExit('Painter marker not found')
-          start = text.index(marker)
-          if 'puzzle.paths[' not in text[start:]:
-              replacement = r'''class _ArrowBoardPainter extends CustomPainter {
-  _ArrowBoardPainter({
-    required this.puzzle,
-    required this.cleared,
-    required this.hints,
-    required this.wrongPoint,
-    required this.wrongProgress,
-    required this.clearingPoint,
-    required this.clearProgress,
-  });
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
 
-  final ArrowPuzzle puzzle;
-  final Set<GridPoint> cleared;
-  final Set<GridPoint> hints;
-  final GridPoint? wrongPoint;
-  final double wrongProgress;
-  final GridPoint? clearingPoint;
-  final double clearProgress;
+      - name: Get dependencies
+        run: flutter pub get
 
-  Offset _center(GridPoint p, double w, double h) => Offset(
-        p.col * w + w / 2,
-        p.row * h + h / 2,
-      );
+      - name: Format Dart sources
+        run: dart format lib test
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (puzzle.rows <= 0 || puzzle.columns <= 0) return;
-    final w = size.width / puzzle.columns;
-    final h = size.height / puzzle.rows;
-    final baseColor = const Color(0xFF102A43);
-
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFFF8F5EA),
-    );
-
-    for (var row = 0; row < puzzle.rows; row++) {
-      for (var col = 0; col < puzzle.columns; col++) {
-        final origin = GridPoint(row, col);
-        final cell = puzzle.cellAt(origin);
-        if (cell.arrows.isEmpty || cleared.contains(origin)) continue;
-
-        final points = puzzle.paths[origin] ?? <GridPoint>[origin];
-        if (points.length < 2) continue;
-
-        final isHint = hints.contains(origin);
-        final isWrong = wrongPoint == origin;
-        final isClearing = clearingPoint == origin;
-        var strokeColor = baseColor;
-        if (isHint) strokeColor = Colors.amber.shade700;
-        if (isWrong) strokeColor = Colors.redAccent;
-
-        final stroke = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = min(w, h) * 0.15
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round
-          ..color = strokeColor;
-
-        if (isWrong) {
-          stroke.strokeWidth *= 1 + sin(wrongProgress * pi) * .25;
-        }
-        if (isClearing) {
-          stroke.strokeWidth *= 1 - clearProgress * .55;
-          stroke.color = baseColor.withValues(alpha: 1 - clearProgress);
-        }
-
-        final path = Path();
-        final first = _center(points.first, w, h);
-        path.moveTo(first.dx, first.dy);
-        for (final point in points.skip(1)) {
-          final p = _center(point, w, h);
-          path.lineTo(p.dx, p.dy);
-        }
-        canvas.drawPath(path, stroke);
-
-        final tip = _center(points.last, w, h);
-        final before = _center(points[points.length - 2], w, h);
-        final delta = tip - before;
-        final distance = delta.distance;
-        if (distance == 0) continue;
-        final unit = delta / distance;
-        final side = Offset(-unit.dy, unit.dx);
-        final head = min(w, h) * .34;
-        final headPath = Path()
-          ..moveTo(
-            tip.dx + unit.dx * head * .58,
-            tip.dy + unit.dy * head * .58,
-          )
-          ..lineTo(
-            tip.dx - unit.dx * head + side.dx * head * .62,
-            tip.dy - unit.dy * head + side.dy * head * .62,
-          )
-          ..lineTo(
-            tip.dx - unit.dx * head - side.dx * head * .62,
-            tip.dy - unit.dy * head - side.dy * head * .62,
-          )
-          ..close();
-        canvas.drawPath(
-          headPath,
-          Paint()
-            ..style = PaintingStyle.fill
-            ..color = stroke.color,
-        );
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => true;
-}
-'''
-              path.write_text(text[:start] + replacement, encoding='utf-8')
-
-      - name: Commit painter change if needed
+      - name: Commit formatting fixes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/screens/arrow_game_screen.dart
+          git add lib test
           if git diff --cached --quiet; then
-            echo "Painter already applied."
+            echo "Dart sources already formatted."
           else
-            git commit -m "Apply long bent arrow board"
+            git commit -m "Format Dart sources"
             git push
           fi
 
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
-      - run: flutter analyze
-      - run: flutter test
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test

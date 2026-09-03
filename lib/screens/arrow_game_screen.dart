@@ -206,7 +206,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       return;
     }
 
-    // The system click is kept offline and acts as the short swipe/clear cue.
     unawaited(_feedback.clearArrow());
     await _showClearAnimation(point);
 
@@ -555,7 +554,7 @@ class _ArrowBoardPainter extends CustomPainter {
         opacity = 1.0;
         slide = Offset(sin(wrongProgress * pi * 6) * unit * .10, 0);
         if (pulse > .01) {
-          canvas.save();
+          // Red pulse is represented directly by the interpolated paint below.
         }
       }
 
@@ -573,7 +572,8 @@ class _ArrowBoardPainter extends CustomPainter {
 
       Offset toOffset(GridPoint p) => Offset((p.col + .5) * cellW, (p.row + .5) * cellH) + slide;
       final path = Path();
-      path.moveTo(toOffset(points.first).dx, toOffset(points.first).dy);
+      final first = toOffset(points.first);
+      path.moveTo(first.dx, first.dy);
       for (final point in points.skip(1)) {
         final o = toOffset(point);
         path.lineTo(o.dx, o.dy);
@@ -591,8 +591,6 @@ class _ArrowBoardPainter extends CustomPainter {
         ..lineTo(back.dx - perp.dx, back.dy - perp.dy)
         ..close();
       canvas.drawPath(arrowHead, Paint()..color = base.color..style = PaintingStyle.fill);
-
-      if (isWrong) canvas.restore();
     }
   }
 

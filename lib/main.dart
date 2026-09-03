@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/arrow_game_screen.dart';
+import 'screens/level_selection_screen.dart';
 
 void main() {
   runApp(const ArrowGameApp());
@@ -18,7 +18,7 @@ class ArrowGameApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const ArrowGameScreen(),
+      home: const LevelSelectionScreen(),
     );
   }
 }

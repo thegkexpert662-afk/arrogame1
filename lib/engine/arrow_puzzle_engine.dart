@@ -20,9 +20,6 @@ class ArrowPuzzle {
   final GridPoint start;
   final GridPoint finish;
   final List<GridPoint> solution;
-
-  /// Visual polyline for each arrow piece. The first point is the arrow tip;
-  /// the remaining points travel backwards through the line and bends.
   final Map<GridPoint, List<GridPoint>> paths;
 
   ArrowCell cellAt(GridPoint point) => cells[point.row * columns + point.col];
@@ -31,12 +28,12 @@ class ArrowPuzzle {
       point.row >= 0 && point.row < rows && point.col >= 0 && point.col < columns;
 }
 
-/// Generates a dense "Tap to Clear" arrow-board.
+/// Generates dense, guaranteed-clearable "Tap to Clear" arrow boards.
 ///
-/// Hard difficulty intentionally fills a large part of the board with many
-/// arrows and long, frequently-bending visual paths. The actual blocking
-/// rules are still checked by [_isClearable], so every generated board has a
-/// valid solution.
+/// The arrow endpoints are created in reverse solution order. Every newly
+/// added arrow is required to have at least one direction whose ray is clear
+/// of all arrows already added. This removes the random-generation deadlock
+/// that could otherwise throw a StateError on dense levels.
 class ArrowPuzzleEngine {
   ArrowPuzzleEngine({Random? random}) : _random = random ?? Random();
 
@@ -53,22 +50,21 @@ class ArrowPuzzleEngine {
     final c = columns ?? size.$2;
     final hard = d >= 6;
 
-    // Hard boards deliberately contain many more arrowheads. At level 1 the
-    // screen already maps to hard difficulty, so the first level is dense.
+    // Keep the endpoint density high while leaving enough free rays for a
+    // guaranteed solution. Long overlapping paths provide the dense visual
+    // coverage without requiring an impossible number of arrowheads.
     final pieceCount = hard
-        ? min((r * c * 3) ~/ 5, 95 + d * 5)
+        ? min((r * c * 4) ~/ 5, 85 + d * 4)
         : min(r * c ~/ 4, 8 + d * 2);
 
-    // Dense random boards can need more attempts before a valid ordering is
-    // found. We never return an impossible puzzle.
-    for (var attempt = 0; attempt < 3000; attempt++) {
+    for (var attempt = 0; attempt < 80; attempt++) {
       final cells = List<ArrowCell>.generate(
         r * c,
         (index) => ArrowCell(row: index ~/ c, col: index % c),
       );
       final paths = <GridPoint, List<GridPoint>>{};
-      final usedPathCells = <GridPoint>{};
       final endpoints = <GridPoint>[];
+      final occupied = <GridPoint>{};
 
       final candidates = <GridPoint>[];
       for (var row = 0; row < r; row++) {
@@ -78,60 +74,167 @@ class ArrowPuzzleEngine {
       }
       candidates.shuffle(_random);
 
+      // Build the board backwards from the final clear order. An arrow added
+      // now only needs to avoid arrows that will be cleared after it.
       for (final endpoint in candidates) {
         if (endpoints.length >= pieceCount) break;
+        if (occupied.contains(endpoint)) continue;
 
         final directions = ArrowDirection.values.toList()..shuffle(_random);
-        var placed = false;
-
+        ArrowDirection? chosenDirection;
         for (final direction in directions) {
-          // Long pieces with bends make the board look like a tangled maze.
-          final minLength = hard ? 4 : 2;
-          final maxLength = hard ? 7 : min(5, 2 + (d ~/ 3));
-          final length = minLength +
-              _random.nextInt(max(1, maxLength - minLength + 1));
-
-          final path = _buildPath(
-            endpoint,
-            direction,
-            length,
-            r,
-            c,
-            usedPathCells,
-            allowVisualOverlap: hard,
-          );
-          if (path == null) continue;
-
-          endpoints.add(endpoint);
-          paths[endpoint] = List.unmodifiable(path);
-          if (!hard) usedPathCells.addAll(path);
-          cells[endpoint.row * c + endpoint.col].arrows.add(direction);
-          placed = true;
-          break;
+          if (_rayIsClearFromOccupied(endpoint, direction, occupied, r, c)) {
+            chosenDirection = direction;
+            break;
+          }
         }
+        if (chosenDirection == null) continue;
 
-        if (placed) continue;
+        final length = hard ? 4 + _random.nextInt(4) : 2 + _random.nextInt(4);
+        final path = _buildPath(
+          endpoint,
+          chosenDirection,
+          length,
+          r,
+          c,
+          <GridPoint>{},
+          allowVisualOverlap: hard,
+        );
+        if (path == null) continue;
+
+        endpoints.add(endpoint);
+        occupied.add(endpoint);
+        paths[endpoint] = List.unmodifiable(path);
+        cells[endpoint.row * c + endpoint.col].arrows.add(chosenDirection);
       }
 
-      if (endpoints.length <
-          (hard ? pieceCount * 9 ~/ 10 : max(5, pieceCount ~/ 2))) {
-        continue;
-      }
+      // If the shuffled candidate order could not reach the target density,
+      // retry with a new order. The final fallback below is deterministic and
+      // still guarantees solvability.
+      if (endpoints.length < pieceCount) continue;
 
+      final solution = endpoints.reversed.toList(growable: false);
       final puzzle = ArrowPuzzle(
         rows: r,
         columns: c,
         cells: cells,
-        start: endpoints.first,
-        finish: endpoints.last,
-        solution: List.unmodifiable(endpoints),
+        start: solution.first,
+        finish: solution.last,
+        solution: solution,
         paths: Map.unmodifiable(paths),
       );
 
       if (_isClearable(puzzle)) return puzzle;
     }
 
-    throw StateError('Could not generate a clearable arrow-line puzzle.');
+    // Guaranteed fallback: construct a moderate-density board using a fixed
+    // row/column pattern. This prevents a playable screen from ever crashing
+    // because a dense random board could not be found.
+    return _generateFallback(r, c, d);
+  }
+
+  ArrowPuzzle _generateFallback(int rows, int columns, int d) {
+    final cells = List<ArrowCell>.generate(
+      rows * columns,
+      (index) => ArrowCell(row: index ~/ columns, col: index % columns),
+    );
+    final paths = <GridPoint, List<GridPoint>>{};
+    final endpoints = <GridPoint>[];
+    final occupied = <GridPoint>{};
+    final target = min((rows * columns * 3) ~/ 4, 70 + d * 3);
+
+    // Repeatedly pick an edge-clearable point. Removing in reverse insertion
+    // order is always valid because each new point avoids existing blockers.
+    final candidates = <GridPoint>[];
+    for (var row = 0; row < rows; row++) {
+      for (var col = 0; col < columns; col++) {
+        candidates.add(GridPoint(row, col));
+      }
+    }
+    candidates.sort((a, b) {
+      final da = min(min(a.row, rows - 1 - a.row), min(a.col, columns - 1 - a.col));
+      final db = min(min(b.row, rows - 1 - b.row), min(b.col, columns - 1 - b.col));
+      return da.compareTo(db);
+    });
+
+    for (final point in candidates.reversed) {
+      if (endpoints.length >= target) break;
+      final direction = _firstClearDirection(point, occupied, rows, columns);
+      if (direction == null) continue;
+      endpoints.add(point);
+      occupied.add(point);
+      cells[point.row * columns + point.col].arrows.add(direction);
+      paths[point] = List.unmodifiable(_buildPath(
+            point,
+            direction,
+            d >= 6 ? 5 : 3,
+            rows,
+            columns,
+            <GridPoint>{},
+            allowVisualOverlap: true,
+          ) ?? <GridPoint>[point]);
+    }
+
+    final solution = endpoints.reversed.toList(growable: false);
+    final puzzle = ArrowPuzzle(
+      rows: rows,
+      columns: columns,
+      cells: cells,
+      start: solution.first,
+      finish: solution.last,
+      solution: solution,
+      paths: Map.unmodifiable(paths),
+    );
+    if (_isClearable(puzzle)) return puzzle;
+
+    // Last-resort single-arrow board. It is preferable to a crash and is
+    // reached only if an extremely unusual board geometry defeats the above.
+    final safe = GridPoint(rows ~/ 2, columns ~/ 2);
+    final safeDirection = _firstClearDirection(safe, <GridPoint>{}, rows, columns) ?? ArrowDirection.up;
+    final safeCells = List<ArrowCell>.generate(
+      rows * columns,
+      (index) => ArrowCell(row: index ~/ columns, col: index % columns),
+    );
+    safeCells[safe.row * columns + safe.col].arrows.add(safeDirection);
+    return ArrowPuzzle(
+      rows: rows,
+      columns: columns,
+      cells: safeCells,
+      start: safe,
+      finish: safe,
+      solution: <GridPoint>[safe],
+      paths: <GridPoint, List<GridPoint>>{safe: <GridPoint>[safe]},
+    );
+  }
+
+  ArrowDirection? _firstClearDirection(
+    GridPoint point,
+    Set<GridPoint> occupied,
+    int rows,
+    int columns,
+  ) {
+    final directions = ArrowDirection.values.toList();
+    for (final direction in directions) {
+      if (_rayIsClearFromOccupied(point, direction, occupied, rows, columns)) {
+        return direction;
+      }
+    }
+    return null;
+  }
+
+  bool _rayIsClearFromOccupied(
+    GridPoint from,
+    ArrowDirection direction,
+    Set<GridPoint> occupied,
+    int rows,
+    int columns,
+  ) {
+    var next = from.move(direction);
+    while (next.row >= 0 && next.row < rows && next.col >= 0 && next.col < columns) {
+      if (occupied.contains(next)) return false;
+      next = next.move(direction);
+    }
+    return true;
   }
 
   List<GridPoint>? _buildPath(
@@ -161,18 +264,11 @@ class ArrowPuzzleEngine {
       final straight = <ArrowDirection>[previousDirection];
       final perpendicular = previousDirection == ArrowDirection.up ||
               previousDirection == ArrowDirection.down
-          ? <ArrowDirection>[
-              ArrowDirection.left,
-              ArrowDirection.right,
-            ]
-          : <ArrowDirection>[
-              ArrowDirection.up,
-              ArrowDirection.down,
-            ];
+          ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]
+          : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];
 
       final options = <ArrowDirection>[];
       if (allowVisualOverlap) {
-        // Strongly prefer bends so the visible pieces become tangled.
         options.addAll(perpendicular);
         options.addAll(perpendicular);
         if (_random.nextInt(5) == 0) options.addAll(straight);
@@ -189,9 +285,7 @@ class ArrowPuzzleEngine {
         if (candidate.row < 0 ||
             candidate.row >= rows ||
             candidate.col < 0 ||
-            candidate.col >= columns) {
-          continue;
-        }
+            candidate.col >= columns) continue;
         if (used.contains(candidate) || path.contains(candidate)) continue;
         next = candidate;
         chosen = direction;
@@ -242,9 +336,7 @@ class ArrowPuzzleEngine {
       for (final point in occupied) {
         final arrows = puzzle.cellAt(point).arrows;
         if (arrows.isEmpty) continue;
-        if (_rayIsClear(puzzle, occupied, point, arrows.first)) {
-          removable.add(point);
-        }
+        if (_rayIsClear(puzzle, occupied, point, arrows.first)) removable.add(point);
       }
       if (removable.isEmpty) return false;
       for (final point in removable) {

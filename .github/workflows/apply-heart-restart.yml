@@ -1,0 +1,46 @@
+name: Apply Heart Restart
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch heart loss and restart
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('lib/screens/arrow_game_screen.dart')
+          s = p.read_text()
+
+          if 'int _hearts = 3;' not in s:
+              s = s.replace("  int _coins = 20;\n", "  int _coins = 20;\n  int _hearts = 3;\n")
+
+          s = s.replace("    _moves = 0;\n    _finished = false;", "    _moves = 0;\n    _hearts = 3;\n    _feedback.resetLives();\n    _finished = false;")
+
+          old = """    if (!_engine.canClear(_puzzle, point, _cleared)) {\n      await _feedback.wrongMove();\n      await _showWrongAnimation(point);\n      return;\n    }"""
+          new = """    if (!_engine.canClear(_puzzle, point, _cleared)) {\n      await _feedback.wrongMove();\n      if (!mounted) return;\n      setState(() => _hearts = _feedback.lives);\n      await _showWrongAnimation(point);\n      if (!mounted) return;\n      if (_hearts <= 0) {\n        await Future<void>.delayed(const Duration(milliseconds: 220));\n        if (!mounted) return;\n        setState(() => _message = '💔 No hearts left — restarting this level…');\n        await Future<void>.delayed(const Duration(milliseconds: 650));\n        if (!mounted) return;\n        setState(_newPuzzle);\n      }\n      return;\n    }"""
+          if old in s:
+              s = s.replace(old, new)
+
+          old_hearts = """                  const Text('♥ ♥ ♥', style: TextStyle(fontSize: 24, color: Colors.redAccent, letterSpacing: 3)),"""
+          new_hearts = """                  Row(\n                    mainAxisSize: MainAxisSize.min,\n                    children: List.generate(3, (index) {\n                      final alive = index < _hearts;\n                      return Padding(\n                        padding: const EdgeInsets.symmetric(horizontal: 2),\n                        child: AnimatedSwitcher(\n                          duration: const Duration(milliseconds: 220),\n                          transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),\n                          child: Icon(\n                            alive ? Icons.favorite_rounded : Icons.heart_broken_rounded,\n                            key: ValueKey('$index-$alive'),\n                            color: alive ? Colors.redAccent : Colors.grey,\n                            size: 25,\n                          ),\n                        ),\n                      );\n                    }),\n                  ),"""
+          if old_hearts in s:
+              s = s.replace(old_hearts, new_hearts)
+
+          p.write_text(s)
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/screens/arrow_game_screen.dart .github/workflows/apply-heart-restart.yml
+          git diff --cached --quiet || git commit -m "Make heart loss restart the current level"
+          git push

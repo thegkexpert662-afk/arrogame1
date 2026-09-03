@@ -36,7 +36,9 @@ void main() {
       final fingerprints = <String>{};
       for (var i = 0; i < 10; i++) {
         final puzzle = engine.generate(difficulty: 5);
-        fingerprints.add('${puzzle.start}|${puzzle.finish}|${puzzle.cells.map((c) => c.arrows).join(';')}');
+        fingerprints.add(
+          '${puzzle.start}|${puzzle.finish}|${puzzle.cells.map((c) => c.arrows).join(';')}',
+        );
       }
       expect(fingerprints.length, greaterThan(1));
     });

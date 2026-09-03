@@ -1,7 +1,13 @@
 import 'dart:math';
 
 class DailyChallenge {
-  const DailyChallenge({required this.seed, required this.difficulty, required this.title, required this.rewardCoins, required this.rewardXp});
+  const DailyChallenge({
+    required this.seed,
+    required this.difficulty,
+    required this.title,
+    required this.rewardCoins,
+    required this.rewardXp,
+  });
   final int seed;
   final int difficulty;
   final String title;

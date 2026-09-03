@@ -82,7 +82,9 @@ class AdService {
 
   bool get isRewardedReady => _rewardedAd != null;
 
-  Future<bool> showRewarded({required void Function(AdReward reward) onReward}) async {
+  Future<bool> showRewarded({
+    required void Function(AdReward reward) onReward,
+  }) async {
     final ad = _rewardedAd;
     if (ad == null) {
       _loadRewarded();
@@ -91,10 +93,12 @@ class AdService {
 
     _rewardedAd = null;
     bool rewarded = false;
-    ad.show(onUserEarnedReward: (_, reward) {
-      rewarded = true;
-      onReward(AdReward(amount: reward.amount.toInt()));
-    });
+    ad.show(
+      onUserEarnedReward: (_, reward) {
+        rewarded = true;
+        onReward(AdReward(amount: reward.amount.toInt()));
+      },
+    );
     return rewarded;
   }
 
@@ -104,7 +108,8 @@ class AdService {
   Future<bool> showInterstitialAfterLevel() async {
     _completedLevelsSinceInterstitial++;
     final now = DateTime.now();
-    final cooldownPassed = _lastInterstitialAt == null ||
+    final cooldownPassed =
+        _lastInterstitialAt == null ||
         now.difference(_lastInterstitialAt!) >= _interstitialCooldown;
 
     if (_completedLevelsSinceInterstitial < _levelsBetweenInterstitials ||

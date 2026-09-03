@@ -120,7 +120,8 @@ class DenseArrowPuzzleEngine {
     for (var step = 1; step < wanted; step++) {
       var candidates = <ArrowDirection>[heading];
       if (step >= 2 && (step.isEven || _random.nextDouble() < .72)) {
-        candidates = heading == ArrowDirection.up || heading == ArrowDirection.down
+        candidates =
+            heading == ArrowDirection.up || heading == ArrowDirection.down
             ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]
             : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];
         candidates.shuffle(_random);
@@ -168,11 +169,7 @@ class DenseArrowPuzzleEngine {
   bool containsPoint(GridPoint p, int rows, int columns) =>
       p.row >= 0 && p.row < rows && p.col >= 0 && p.col < columns;
 
-  ArrowDirection _nearestEdgeDirection(
-    GridPoint p,
-    int rows,
-    int columns,
-  ) {
+  ArrowDirection _nearestEdgeDirection(GridPoint p, int rows, int columns) {
     final distances = <ArrowDirection, int>{
       ArrowDirection.up: p.row,
       ArrowDirection.down: rows - 1 - p.row,
@@ -187,10 +184,8 @@ class DenseArrowPuzzleEngine {
     return choices[_random.nextInt(choices.length)];
   }
 
-  int _edgeDistance(GridPoint p, int rows, int columns) => min(
-        min(p.row, rows - 1 - p.row),
-        min(p.col, columns - 1 - p.col),
-      );
+  int _edgeDistance(GridPoint p, int rows, int columns) =>
+      min(min(p.row, rows - 1 - p.row), min(p.col, columns - 1 - p.col));
 
   (int, int) _sizeForDifficulty(int d) {
     if (d <= 2) return (8, 10);
@@ -237,8 +232,7 @@ class DenseArrowPuzzleEngine {
     DenseArrowPuzzle puzzle,
     GridPoint from,
     ArrowDirection direction,
-  ) =>
-      puzzle.contains(from) && puzzle.cellAt(from).has(direction);
+  ) => puzzle.contains(from) && puzzle.cellAt(from).has(direction);
 
   List<GridPoint> findSolutionPath(DenseArrowPuzzle puzzle) {
     final remaining = <GridPoint>{};
@@ -284,11 +278,7 @@ class ArrowPuzzleEngine extends DenseArrowPuzzleEngine {
       super.generate(rows: rows, columns: columns, difficulty: difficulty);
 
   @override
-  bool canClear(
-    ArrowPuzzle puzzle,
-    GridPoint point,
-    Set<GridPoint> cleared,
-  ) =>
+  bool canClear(ArrowPuzzle puzzle, GridPoint point, Set<GridPoint> cleared) =>
       super.canClear(puzzle, point, cleared);
 
   @override
@@ -296,11 +286,7 @@ class ArrowPuzzleEngine extends DenseArrowPuzzleEngine {
       super.findSolutionPath(puzzle);
 
   @override
-  bool canMove(
-    ArrowPuzzle puzzle,
-    GridPoint from,
-    ArrowDirection direction,
-  ) =>
+  bool canMove(ArrowPuzzle puzzle, GridPoint from, ArrowDirection direction) =>
       super.canMove(puzzle, from, direction);
 
   @override

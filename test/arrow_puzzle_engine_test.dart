@@ -23,8 +23,10 @@ void main() {
 
       expect(engine.isSolvable(hard), isTrue);
       expect(engine.isSolvable(extreme), isTrue);
-      expect(extreme.rows * extreme.columns,
-          greaterThan(hard.rows * hard.columns));
+      expect(
+        extreme.rows * extreme.columns,
+        greaterThan(hard.rows * hard.columns),
+      );
     });
 
     test('solution search works independently of stored solution', () {

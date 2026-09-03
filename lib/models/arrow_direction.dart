@@ -50,10 +50,8 @@ class GridPoint {
   final int row;
   final int col;
 
-  GridPoint move(ArrowDirection direction) => GridPoint(
-        row + direction.rowDelta,
-        col + direction.colDelta,
-      );
+  GridPoint move(ArrowDirection direction) =>
+      GridPoint(row + direction.rowDelta, col + direction.colDelta);
 
   @override
   bool operator ==(Object other) =>

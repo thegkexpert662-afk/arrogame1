@@ -1,7 +1,14 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 class PlayerProgress {
-  const PlayerProgress({required this.coins, required this.xp, required this.playerLevel, required this.streak, required this.lastDaily, required this.achievements});
+  const PlayerProgress({
+    required this.coins,
+    required this.xp,
+    required this.playerLevel,
+    required this.streak,
+    required this.lastDaily,
+    required this.achievements,
+  });
   final int coins;
   final int xp;
   final int playerLevel;
@@ -34,7 +41,8 @@ class PlayerProgressService {
     // Repair values that may have been corrupted or manually changed locally.
     if (rawCoins != coins) await _prefs.setInt('coins', coins);
     if (rawXp != xp) await _prefs.setInt('xp', xp);
-    if (rawLevel != playerLevel) await _prefs.setInt('player_level', playerLevel);
+    if (rawLevel != playerLevel)
+      await _prefs.setInt('player_level', playerLevel);
     if (rawStreak != streak) await _prefs.setInt('streak', streak);
 
     return PlayerProgress(
@@ -43,13 +51,18 @@ class PlayerProgressService {
       playerLevel: playerLevel,
       streak: streak,
       lastDaily: await _prefs.getString('last_daily'),
-      achievements: (await _prefs.getStringList('achievements') ?? <String>[]).toSet(),
+      achievements: (await _prefs.getStringList('achievements') ?? <String>[])
+          .toSet(),
     );
   }
 
   int levelForXp(int xp) => (xp.clamp(0, maxXp).toInt() ~/ 100) + 1;
 
-  Future<PlayerProgress> award({int coins = 0, int xp = 0, String? achievement}) async {
+  Future<PlayerProgress> award({
+    int coins = 0,
+    int xp = 0,
+    String? achievement,
+  }) async {
     // Rewards are trusted only when they are non-negative and within a safe
     // per-operation limit. This is a basic local anti-cheat boundary, not a
     // substitute for server-side validation.
@@ -61,7 +74,8 @@ class PlayerProgressService {
     final newCoins = (p.coins + coins).clamp(0, maxCoins).toInt();
     final newXp = (p.xp + xp).clamp(0, maxXp).toInt();
     final achievements = {...p.achievements};
-    if (achievement != null && achievement.length <= 64) achievements.add(achievement);
+    if (achievement != null && achievement.length <= 64)
+      achievements.add(achievement);
 
     await _prefs.setInt('coins', newCoins);
     await _prefs.setInt('xp', newXp);
@@ -76,12 +90,21 @@ class PlayerProgressService {
     final today = now.toIso8601String().substring(0, 10);
     if (p.lastDaily == today) return p;
 
-    final yesterday = now.subtract(const Duration(days: 1)).toIso8601String().substring(0, 10);
-    final streak = (p.lastDaily == yesterday ? p.streak + 1 : 1).clamp(1, maxStreak).toInt();
+    final yesterday = now
+        .subtract(const Duration(days: 1))
+        .toIso8601String()
+        .substring(0, 10);
+    final streak = (p.lastDaily == yesterday ? p.streak + 1 : 1)
+        .clamp(1, maxStreak)
+        .toInt();
     await _prefs.setString('last_daily', today);
     await _prefs.setInt('streak', streak);
 
     final reward = 10 + (streak.clamp(1, 7).toInt() * 5);
-    return award(coins: reward, xp: 25, achievement: streak >= 7 ? '7_day_streak' : null);
+    return award(
+      coins: reward,
+      xp: 25,
+      achievement: streak >= 7 ? '7_day_streak' : null,
+    );
   }
 }

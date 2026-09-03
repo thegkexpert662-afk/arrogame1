@@ -24,10 +24,19 @@ class LevelProgressService {
   Future<bool> isUnlocked(int level) async =>
       level >= 1 && level <= await unlockedLevel();
 
-  Future<void> completeLevel({required int level, required int score, required int timeSeconds}) async {
+  Future<void> completeLevel({
+    required int level,
+    required int score,
+    required int timeSeconds,
+  }) async {
     // Only plausible local results are accepted. This is basic anti-cheat and
     // corruption protection; competitive/server validation would be stronger.
-    if (level < 1 || level > maxLevel || score < 0 || score > maxScore || timeSeconds < 0 || timeSeconds > maxTimeSeconds) {
+    if (level < 1 ||
+        level > maxLevel ||
+        score < 0 ||
+        score > maxScore ||
+        timeSeconds < 0 ||
+        timeSeconds > maxTimeSeconds) {
       return;
     }
 
@@ -50,7 +59,8 @@ class LevelProgressService {
   }
 
   Future<bool> isCompleted(int level) async =>
-      level >= 1 && level <= maxLevel &&
+      level >= 1 &&
+      level <= maxLevel &&
       await _prefs.getBool('$_completedPrefix$level') == true;
 
   Future<int?> bestScore(int level) async {

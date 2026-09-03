@@ -49,8 +49,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   int get _totalArrows =>
       _puzzle.cells.where((cell) => cell.arrows.isNotEmpty).length;
   int get _remaining => max(0, _totalArrows - _cleared.length);
-  String get _difficultyName =>
-      _difficulty <= 8 ? 'HARD' : 'EXTREME';
+  String get _difficultyName => _difficulty <= 8 ? 'HARD' : 'EXTREME';
 
   @override
   void initState() {
@@ -82,9 +81,9 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   void _newPuzzle() {
     _timer?.cancel();
     final random = Random(widget.level * 1000003 + _difficulty);
-    _puzzle = ArrowPuzzleEngine(random: random).generate(
-      difficulty: _difficulty,
-    );
+    _puzzle = ArrowPuzzleEngine(
+      random: random,
+    ).generate(difficulty: _difficulty);
     _solution = _engine.findSolutionPath(_puzzle);
     _cleared.clear();
     _hints.clear();
@@ -163,7 +162,10 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   }
 
   Future<void> _tapArrow(GridPoint point) async {
-    if (_finished || _paused || _cleared.contains(point) || _clearingPoint != null) {
+    if (_finished ||
+        _paused ||
+        _cleared.contains(point) ||
+        _clearingPoint != null) {
       return;
     }
     if (_puzzle.cellAt(point).arrows.isEmpty) return;
@@ -409,7 +411,9 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           ),
           IconButton(
             onPressed: _pauseResume,
-            icon: Icon(_paused ? Icons.play_arrow_rounded : Icons.pause_rounded),
+            icon: Icon(
+              _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+            ),
           ),
           IconButton(
             onPressed: () => setState(_newPuzzle),
@@ -447,11 +451,15 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
               padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
               child: Row(
                 children: [
-                  Text('⏱ ${_formatTime(_seconds)}',
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text(
+                    '⏱ ${_formatTime(_seconds)}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const Spacer(),
-                  Text('🪙 $_coins',
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(
+                    '🪙 $_coins',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ],
               ),
             ),
@@ -488,8 +496,8 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
                             itemCount: _puzzle.rows * _puzzle.columns,
                             gridDelegate:
                                 SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: _puzzle.columns,
-                            ),
+                                  crossAxisCount: _puzzle.columns,
+                                ),
                             itemBuilder: (_, index) {
                               final point = GridPoint(
                                 index ~/ _puzzle.columns,
@@ -548,10 +556,7 @@ class _Pill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 17),
-            const SizedBox(width: 5),
-          ],
+          if (icon != null) ...[Icon(icon, size: 17), const SizedBox(width: 5)],
           Text(text, style: const TextStyle(fontWeight: FontWeight.w800)),
         ],
       ),
@@ -602,10 +607,8 @@ class _ArrowBoardPainter extends CustomPainter {
   final GridPoint? clearingPoint;
   final double clearProgress;
 
-  Offset _center(GridPoint p, double w, double h) => Offset(
-        p.col * w + w / 2,
-        p.row * h + h / 2,
-      );
+  Offset _center(GridPoint p, double w, double h) =>
+      Offset(p.col * w + w / 2, p.row * h + h / 2);
 
   @override
   void paint(Canvas canvas, Size size) {

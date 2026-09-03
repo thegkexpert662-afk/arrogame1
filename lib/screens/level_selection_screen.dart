@@ -77,7 +77,9 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
     if (!mounted) return;
     setState(() => _progress = after);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('🎁 Daily reward claimed! Streak ${after.streak}')),
+      SnackBar(
+        content: Text('🎁 Daily reward claimed! Streak ${after.streak}'),
+      ),
     );
   }
 
@@ -217,9 +219,7 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
                             refresh(() {});
                           },
                           icon: Icon(
-                            _background == bg
-                                ? Icons.check
-                                : Icons.wallpaper,
+                            _background == bg ? Icons.check : Icons.wallpaper,
                           ),
                           label: Text(bg.name),
                         );
@@ -255,7 +255,9 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
               border: Border.all(
                 color: completed
                     ? primary.withValues(alpha: 0.45)
-                    : Theme.of(context).colorScheme.outline.withValues(alpha: 0.18),
+                    : Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.18),
               ),
             ),
             child: Column(
@@ -380,11 +382,11 @@ class _LevelSelectionScreenState extends State<LevelSelectionScreen> {
                     itemCount: _unlocked,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 4,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 0.9,
-                    ),
+                          crossAxisCount: 4,
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 0.9,
+                        ),
                     itemBuilder: (context, index) => _levelCard(index + 1),
                   ),
                 ),

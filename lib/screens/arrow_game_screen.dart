@@ -9,6 +9,21 @@ import '../services/ad_service.dart';
 import '../services/gameplay_feedback_service.dart';
 import '../services/level_progress_service.dart';
 
+extension _ArrowDirectionVector on ArrowDirection {
+  Offset get vector {
+    switch (this) {
+      case ArrowDirection.up:
+        return const Offset(0, -1);
+      case ArrowDirection.down:
+        return const Offset(0, 1);
+      case ArrowDirection.left:
+        return const Offset(-1, 0);
+      case ArrowDirection.right:
+        return const Offset(1, 0);
+    }
+  }
+}
+
 class ArrowGameScreen extends StatefulWidget {
   const ArrowGameScreen({super.key, required this.level});
   final int level;
@@ -687,8 +702,6 @@ class _ArrowBoardPainter extends CustomPainter {
           col * cellWidth + cellWidth / 2,
           row * cellHeight + cellHeight / 2,
         );
-        // ArrowCell.arrows is a Set<ArrowDirection>, so the first item is
-        // already an ArrowDirection; there is no nested .direction field.
         final direction = cell.arrows.first;
 
         final isHint = hints.contains(point);

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../engine/arrow_puzzle_engine.dart';
 import '../models/arrow_direction.dart';
+import '../services/ad_service.dart';
 import '../services/gameplay_feedback_service.dart';
 import '../services/level_progress_service.dart';
 
@@ -20,6 +21,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     with TickerProviderStateMixin {
   final ArrowPuzzleEngine _engine = ArrowPuzzleEngine();
   final _feedback = GameplayFeedbackService.instance;
+  final _ads = AdService.instance;
   late ArrowPuzzle _puzzle;
   late GridPoint _player;
   final List<GridPoint> _visited = [];
@@ -34,6 +36,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   bool _finished = false;
   bool _paused = false;
   bool _showFullSolution = false;
+  bool _rewardAdLoading = false;
   String _message = 'Follow the arrows to reach FINISH';
   late AnimationController _winController;
 
@@ -99,6 +102,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       score: score,
       timeSeconds: _seconds,
     );
+    await _ads.showInterstitialAfterLevel();
     if (!mounted) return;
     setState(() {
       _bestScore = max(_bestScore, score);
@@ -168,7 +172,8 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           ListTile(leading: const Icon(Icons.arrow_forward), title: const Text('Next correct move'), subtitle: Text('Free hints: $_freeHints'), onTap: () { Navigator.pop(sheetContext); _nextMoveHint(); }),
           ListTile(leading: const Icon(Icons.route), title: const Text('Correct path highlight'), subtitle: const Text('Shows the route from your position'), onTap: () { Navigator.pop(sheetContext); _pathHint(); }),
           ListTile(leading: const Icon(Icons.lightbulb), title: const Text('Full solution hint'), subtitle: const Text('Costs 5 coins'), onTap: () { Navigator.pop(sheetContext); _fullSolutionHint(); }),
-          ListTile(leading: const Icon(Icons.ondemand_video), title: const Text('Reward Ad'), subtitle: const Text('Ad integration hook for +1 hint'), onTap: () { Navigator.pop(sheetContext); _rewardAdHint(); }),
+          ListTile(leading: const Icon(Icons.ondemand_video), title: const Text('Reward Ad → Hint'), subtitle: const Text('+1 hint after watching the ad'), onTap: () { Navigator.pop(sheetContext); _rewardAdHint(); }),
+          ListTile(leading: const Icon(Icons.monetization_on_outlined), title: const Text('Reward Ad → Coins'), subtitle: const Text('+20 coins after watching the ad'), onTap: () { Navigator.pop(sheetContext); _rewardAdCoins(); }),
         ]),
       ),
     );
@@ -221,10 +226,58 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     });
   }
 
-  void _rewardAdHint() {
-    // Safe placeholder: real rewarded-ad SDK can call this callback after the
-    // user actually watches an ad. No automatic reward is granted here.
-    setState(() => _message = 'Reward Ad is ready for ad-SDK integration.');
+  Future<void> _rewardAdHint() async {
+    if (_rewardAdLoading) return;
+    setState(() {
+      _rewardAdLoading = true;
+      _message = 'Loading Reward Ad…';
+    });
+
+    final shown = await _ads.showRewarded(
+      onReward: (_) {
+        if (!mounted) return;
+        final index = _puzzle.solution.indexOf(_player);
+        if (index >= 0 && index + 1 < _puzzle.solution.length) {
+          setState(() {
+            _freeHints++;
+            _hintPath..clear()..add(_puzzle.solution[index + 1]);
+            _message = '🎁 +1 hint!';
+          });
+        } else {
+          setState(() { _freeHints++; _message = '🎁 +1 hint!'; });
+        }
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _rewardAdLoading = false;
+      if (!shown) _message = 'Reward Ad is not ready. Please try again shortly.';
+    });
+  }
+
+  Future<void> _rewardAdCoins() async {
+    if (_rewardAdLoading) return;
+    setState(() {
+      _rewardAdLoading = true;
+      _message = 'Loading Reward Ad…';
+    });
+
+    final shown = await _ads.showRewarded(
+      onReward: (_) {
+        if (!mounted) return;
+        setState(() {
+          _coins += 20;
+          _message = '🎁 +20 coins!';
+        });
+      },
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _rewardAdLoading = false;
+      if (!shown) _message = 'Reward Ad is not ready. Please try again shortly.';
+    });
   }
 
   Future<void> _pauseResume() async {
@@ -314,6 +367,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           ]),
           if (_finished) Positioned.fill(child: IgnorePointer(child: AnimatedBuilder(animation: _winController, builder: (_, __) => Center(child: Transform.scale(scale: 1 + (_winController.value * .25), child: Opacity(opacity: 1 - (_winController.value * .15), child: const Icon(Icons.celebration, size: 110))))))),
           if (_paused) Positioned.fill(child: Container(color: Colors.black26)),
+          if (_rewardAdLoading) Positioned.fill(child: Container(color: Colors.black12, child: const Center(child: Card(child: Padding(padding: EdgeInsets.all(18), child: Row(mainAxisSize: MainAxisSize.min, children: [SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)), SizedBox(width: 12), Text('Loading ad…')])))))),
         ]),
       ),
     );

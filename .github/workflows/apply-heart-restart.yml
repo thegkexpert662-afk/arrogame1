@@ -48,13 +48,11 @@ jobs:
               "    _solution = _engine.findSolutionPath(_puzzle);",
           )
 
-          # Keep the title as an explicit escaped newline string.
-          s = s.replace("Text('CLEAR\\nTHE BOARD'", "Text('CLEAR\\nTHE BOARD'")
+          # Repair a malformed title string that contains a real newline after the backslash.
+          s = s.replace("Text('CLEAR\\\nTHE BOARD'", "Text('CLEAR\\nTHE BOARD'")
 
           p.write_text(s)
 
-          # The legacy engine is kept as a compatibility path for tests and
-          # older imports, but gameplay now has a crash-proof replacement.
           safe = Path('lib/engine/dense_arrow_puzzle_engine.dart')
           legacy = Path('lib/engine/arrow_puzzle_engine.dart')
           if safe.exists():
@@ -65,5 +63,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/screens/arrow_game_screen.dart lib/engine/arrow_puzzle_engine.dart .github/workflows/apply-heart-restart.yml
-          git diff --cached --quiet || git commit -m "Clean arrow game screen analyzer issues"
+          git diff --cached --quiet || git commit -m "Fix arrow game screen syntax"
           git push

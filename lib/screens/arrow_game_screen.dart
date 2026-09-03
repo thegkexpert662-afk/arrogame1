@@ -45,7 +45,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   late AnimationController _wrongController;
   late AnimationController _clearController;
 
-  int get _difficulty => widget.level <= 5 ? 2 : min(10, 6 + ((widget.level - 6) ~/ 100));
+  int get _difficulty => min(10, 6 + ((widget.level - 1) ~/ 10));
   int get _totalArrows =>
       _puzzle.cells.where((cell) => cell.arrows.isNotEmpty).length;
   int get _remaining => _totalArrows - _cleared.length;

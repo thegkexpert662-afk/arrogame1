@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'screens/level_selection_screen.dart';
+import 'services/ad_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AdService.instance.initialize();
   runApp(const ArrowGameApp());
 }
 

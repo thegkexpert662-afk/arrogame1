@@ -11,14 +11,13 @@ concurrency:
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message || '', 'Apply long bent arrow board') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Replace board painter with long bent paths
+      - name: Apply long bent board painter
         shell: python
         run: |
           from pathlib import Path
@@ -27,8 +26,11 @@ jobs:
           marker = 'class _ArrowBoardPainter extends CustomPainter {'
           if marker not in text:
               raise SystemExit('Painter marker not found')
-
           start = text.index(marker)
+          if 'puzzle.paths[' in text[start:]:
+              print('Long-path painter already present; nothing to commit.')
+              raise SystemExit(0)
+
           replacement = r'''class _ArrowBoardPainter extends CustomPainter {
   _ArrowBoardPainter({
     required this.puzzle,
@@ -140,18 +142,15 @@ jobs:
   bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => true;
 }
 '''
-          if 'puzzle.paths[' in text and text.index('puzzle.paths[') > start:
-              print('Long-path painter already present; nothing to patch.')
-              raise SystemExit(0)
           path.write_text(text[:start] + replacement, encoding='utf-8')
 
-      - name: Commit and push
+      - name: Commit painter
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add lib/screens/arrow_game_screen.dart
           if git diff --cached --quiet; then
-            echo "No painter changes to commit."
+            echo "No painter changes needed."
             exit 0
           fi
           git commit -m "Apply long bent arrow board"

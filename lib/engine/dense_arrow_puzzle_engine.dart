@@ -20,8 +20,6 @@ class DenseArrowPuzzle {
   final GridPoint start;
   final GridPoint finish;
   final List<GridPoint> solution;
-
-  /// Visual-only paths. Gameplay still uses the arrow direction in [cells].
   final Map<GridPoint, List<GridPoint>> paths;
 
   ArrowCell cellAt(GridPoint point) => cells[point.row * columns + point.col];
@@ -42,7 +40,7 @@ class DenseArrowPuzzleEngine {
     final size = _sizeForDifficulty(d);
     final r = rows ?? size.$1;
     final c = columns ?? size.$2;
-    final density = d >= 6 ? 1.0 : .55;
+    final density = d >= 6 ? .24 : .18;
 
     final cells = List<ArrowCell>.generate(
       r * c,
@@ -57,7 +55,7 @@ class DenseArrowPuzzleEngine {
     all.shuffle(_random);
 
     final target = max(1, (r * c * density).round());
-    final selected = density >= .999 ? all : all.take(target);
+    final selected = all.take(target);
     final points = <GridPoint>[];
     final paths = <GridPoint, List<GridPoint>>{};
 
@@ -93,40 +91,55 @@ class DenseArrowPuzzleEngine {
     int difficulty,
   ) {
     final result = <GridPoint>[start];
+    final used = <GridPoint>{start};
     var current = start;
     var heading = direction;
-    final wanted = difficulty >= 9 ? 7 : 5 + _random.nextInt(3);
+    final wanted = difficulty >= 9
+        ? 9 + _random.nextInt(4)
+        : 6 + _random.nextInt(4);
 
     for (var step = 1; step < wanted; step++) {
-      var next = current.move(heading);
+      var candidates = <ArrowDirection>[heading];
+      if (step >= 2 && (step.isEven || _random.nextDouble() < .65)) {
+        candidates = heading == ArrowDirection.up || heading == ArrowDirection.down
+            ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]
+            : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];
+        candidates.shuffle(_random);
+        candidates.add(heading);
+      }
 
-      if (!containsPoint(next, rows, columns)) {
-        final alternatives = <ArrowDirection>[
+      GridPoint? next;
+      ArrowDirection? chosen;
+      for (final candidate in candidates) {
+        final p = current.move(candidate);
+        if (containsPoint(p, rows, columns) && !used.contains(p)) {
+          next = p;
+          chosen = candidate;
+          break;
+        }
+      }
+
+      if (next == null) {
+        final fallback = <ArrowDirection>[
           ArrowDirection.up,
           ArrowDirection.down,
           ArrowDirection.left,
           ArrowDirection.right,
         ]..shuffle(_random);
-        final candidate = alternatives.firstWhere(
-          (d) => containsPoint(current.move(d), rows, columns),
-          orElse: () => heading,
-        );
-        heading = candidate;
-        next = current.move(heading);
-      } else if (step >= 2 && (step.isEven || _random.nextDouble() < .55)) {
-        final turns = heading == ArrowDirection.up || heading == ArrowDirection.down
-            ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]
-            : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];
-        heading = turns[_random.nextInt(turns.length)];
-        next = current.move(heading);
-        if (!containsPoint(next, rows, columns)) {
-          heading = direction;
-          next = current.move(heading);
+        for (final candidate in fallback) {
+          final p = current.move(candidate);
+          if (containsPoint(p, rows, columns) && !used.contains(p)) {
+            next = p;
+            chosen = candidate;
+            break;
+          }
         }
       }
 
-      if (!containsPoint(next, rows, columns)) break;
+      if (next == null || chosen == null) break;
+      heading = chosen;
       current = next;
+      used.add(current);
       result.add(current);
     }
 

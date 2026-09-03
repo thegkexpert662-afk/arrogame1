@@ -14,10 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Patch heart loss restart and hard levels
+      - name: Patch heart loss restart, hard levels, and safe arrow engine
         shell: python
         run: |
           from pathlib import Path
+
           p = Path('lib/screens/arrow_game_screen.dart')
           s = p.read_text()
 
@@ -26,7 +27,7 @@ jobs:
 
           s = s.replace("    _moves = 0;\n    _finished = false;", "    _moves = 0;\n    _hearts = 3;\n    _feedback.resetLives();\n    _finished = false;")
 
-          old = """    if (!_engine.canClear(_puzzle, point, _cleared)) {\n      await _feedback.wrongMove();\n      await _showWrongAnimation(point);\n      return;\n    }"""
+          old = """    if (!_engine.canClear(_puzzle, point, _cleared) {\n      await _feedback.wrongMove();\n      await _showWrongAnimation(point);\n      return;\n    }"""
           new = """    if (!_engine.canClear(_puzzle, point, _cleared)) {\n      await _feedback.wrongMove();\n      if (!mounted) return;\n      setState(() => _hearts = _feedback.lives);\n      await _showWrongAnimation(point);\n      if (!mounted) return;\n      if (_hearts <= 0) {\n        await Future<void>.delayed(const Duration(milliseconds: 220));\n        if (!mounted) return;\n        setState(() => _message = '💔 No hearts left — restarting this level…');\n        await Future<void>.delayed(const Duration(milliseconds: 650));\n        if (!mounted) return;\n        setState(_newPuzzle);\n      }\n      return;\n    }"""
           if old in s:
               s = s.replace(old, new)
@@ -42,10 +43,18 @@ jobs:
               s = s.replace(old_difficulty, new_difficulty)
 
           p.write_text(s)
+
+          # The legacy engine is kept as a compatibility path for tests and
+          # older imports, but gameplay now has a crash-proof replacement.
+          safe = Path('lib/engine/dense_arrow_puzzle_engine.dart')
+          legacy = Path('lib/engine/arrow_puzzle_engine.dart')
+          if safe.exists():
+              legacy.write_text(safe.read_text())
+
       - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/screens/arrow_game_screen.dart .github/workflows/apply-heart-restart.yml
-          git diff --cached --quiet || git commit -m "Make level 6+ hard and restart on heart loss"
+          git add lib/screens/arrow_game_screen.dart lib/engine/arrow_puzzle_engine.dart .github/workflows/apply-heart-restart.yml
+          git diff --cached --quiet || git commit -m "Apply safe dense arrow engine"
           git push

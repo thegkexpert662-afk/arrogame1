@@ -13,13 +13,10 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Replace board painter
+      - name: Replace board painter with long bent paths
         shell: python
         run: |
           from pathlib import Path
-          import re
-
           path = Path('lib/screens/arrow_game_screen.dart')
           text = path.read_text()
           marker = 'class _ArrowBoardPainter extends CustomPainter {'
@@ -43,40 +40,32 @@ jobs:
   final GridPoint? clearingPoint;
   final double clearProgress;
 
-  Offset _center(GridPoint point, double cellWidth, double cellHeight) =>
-      Offset(
-        point.col * cellWidth + cellWidth / 2,
-        point.row * cellHeight + cellHeight / 2,
+  Offset _center(GridPoint p, double w, double h) => Offset(
+        p.col * w + w / 2,
+        p.row * h + h / 2,
       );
 
   @override
   void paint(Canvas canvas, Size size) {
     if (puzzle.rows <= 0 || puzzle.columns <= 0) return;
-
-    final cellWidth = size.width / puzzle.columns;
-    final cellHeight = size.height / puzzle.rows;
-    canvas.drawRect(
-      Offset.zero & size,
-      Paint()..color = const Color(0xFFF8F5EA),
-    );
+    final w = size.width / puzzle.columns;
+    final h = size.height / puzzle.rows;
+    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFFF8F5EA));
 
     for (var row = 0; row < puzzle.rows; row++) {
       for (var col = 0; col < puzzle.columns; col++) {
-        final point = GridPoint(row, col);
-        final cell = puzzle.cellAt(point);
-        if (cell.arrows.isEmpty || cleared.contains(point)) continue;
+        final origin = GridPoint(row, col);
+        final cell = puzzle.cellAt(origin);
+        if (cell.arrows.isEmpty || cleared.contains(origin)) continue;
 
-        final visualPoints = puzzle.paths[point];
-        final points = visualPoints == null || visualPoints.length < 2
-            ? <GridPoint>[point, point.move(cell.arrows.first)]
-            : visualPoints;
-
-        final isHint = hints.contains(point);
-        final isWrong = wrongPoint == point;
-        final isClearing = clearingPoint == point;
+        final points = puzzle.paths[origin] ?? <GridPoint>[origin];
+        if (points.isEmpty) continue;
+        final isHint = hints.contains(origin);
+        final isWrong = wrongPoint == origin;
+        final isClearing = clearingPoint == origin;
         final paint = Paint()
           ..style = PaintingStyle.stroke
-          ..strokeWidth = min(cellWidth, cellHeight) * 0.14
+          ..strokeWidth = min(w, h) * 0.16
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
           ..color = isHint
@@ -85,71 +74,46 @@ jobs:
                   ? Colors.redAccent
                   : const Color(0xFF102A43);
 
+        if (isWrong) paint.strokeWidth *= 1 + sin(wrongProgress * pi) * .25;
         if (isClearing) {
-          paint.strokeWidth *= 1 - clearProgress * 0.55;
-          paint.color = const Color(0xFF102A43).withValues(
-            alpha: 1 - clearProgress,
-          );
-        }
-        if (isWrong) {
-          paint.strokeWidth *= 1 + sin(wrongProgress * pi) * 0.25;
+          paint.strokeWidth *= 1 - clearProgress * .55;
+          paint.color = const Color(0xFF102A43).withValues(alpha: 1 - clearProgress);
         }
 
-        final path = Path();
-        final first = _center(points.first, cellWidth, cellHeight);
-        path.moveTo(first.dx, first.dy);
-        for (final pointOnPath in points.skip(1)) {
-          final p = _center(pointOnPath, cellWidth, cellHeight);
-          path.lineTo(p.dx, p.dy);
+        final line = Path();
+        final first = _center(points.first, w, h);
+        line.moveTo(first.dx, first.dy);
+        for (final p in points.skip(1)) {
+          final q = _center(p, w, h);
+          line.lineTo(q.dx, q.dy);
         }
-        canvas.drawPath(path, paint);
+        canvas.drawPath(line, paint);
 
-        final from = _center(points[points.length - 2], cellWidth, cellHeight);
-        final tip = _center(points.last, cellWidth, cellHeight);
-        final delta = tip - from;
-        final distance = delta.distance;
-        if (distance == 0) continue;
-        final direction = delta / distance;
-        final perpendicular = Offset(-direction.dy, direction.dx);
-        final headSize = min(cellWidth, cellHeight) * 0.32;
-        final arrowPath = Path()
-          ..moveTo(tip.dx, tip.dy)
-          ..lineTo(
-            tip.dx - direction.dx * headSize +
-                perpendicular.dx * headSize * 0.58,
-            tip.dy - direction.dy * headSize +
-                perpendicular.dy * headSize * 0.58,
-          )
-          ..lineTo(
-            tip.dx - direction.dx * headSize -
-                perpendicular.dx * headSize * 0.58,
-            tip.dy - direction.dy * headSize -
-                perpendicular.dy * headSize * 0.58,
-          )
+        final tipPoint = points.last;
+        final beforeTip = points.length > 1 ? points[points.length - 2] : origin;
+        final tip = _center(tipPoint, w, h);
+        final before = _center(beforeTip, w, h);
+        final delta = tip - before;
+        if (delta.distance == 0) continue;
+        final unit = delta / delta.distance;
+        final side = Offset(-unit.dy, unit.dx);
+        final head = min(w, h) * .34;
+        final arrow = Path()
+          ..moveTo(tip.dx + unit.dx * head * .55, tip.dy + unit.dy * head * .55)
+          ..lineTo(tip.dx - unit.dx * head + side.dx * head * .62, tip.dy - unit.dy * head + side.dy * head * .62)
+          ..lineTo(tip.dx - unit.dx * head - side.dx * head * .62, tip.dy - unit.dy * head - side.dy * head * .62)
           ..close();
-        canvas.drawPath(
-          arrowPath,
-          Paint()
-            ..style = PaintingStyle.fill
-            ..color = paint.color,
-        );
+        canvas.drawPath(arrow, Paint()..style = PaintingStyle.fill..color = paint.color);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) =>
-      oldDelegate.puzzle != puzzle ||
-      oldDelegate.cleared != cleared ||
-      oldDelegate.hints != hints ||
-      oldDelegate.wrongPoint != wrongPoint ||
-      oldDelegate.wrongProgress != wrongProgress ||
-      oldDelegate.clearingPoint != clearingPoint ||
-      oldDelegate.clearProgress != clearProgress;
+  bool shouldRepaint(covariant _ArrowBoardPainter oldDelegate) => true;
 }
 '''
           path.write_text(text[:start] + replacement)
-      - name: Commit and remove one-time workflow
+      - name: Commit screen and remove patch workflow
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

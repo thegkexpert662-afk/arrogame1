@@ -1,0 +1,334 @@
+name: Fix Arrow Screen Syntax
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Replace malformed build method with balanced Dart
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('lib/screens/arrow_game_screen.dart')
+          text = path.read_text()
+
+          start = text.index('  @override\n  Widget build(BuildContext context) {')
+          end = text.index('\nclass _Pill extends StatelessWidget', start)
+
+          build = r'''  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8F5EA),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFF8F5EA),
+        elevation: 0,
+        leading: IconButton(
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+        ),
+        title: Text(
+          'Level ${widget.level}',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: _showHintMenu,
+            icon: const Icon(Icons.lightbulb_outline_rounded),
+          ),
+          IconButton(
+            onPressed: _pauseResume,
+            icon: Icon(
+              _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+            ),
+          ),
+          IconButton(
+            onPressed: _restart,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                const SizedBox(height: 4),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'CLEAR',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 34,
+                        height: .95,
+                        fontWeight: FontWeight.w900,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                    Text(
+                      'THE BOARD',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 34,
+                        height: .95,
+                        fontWeight: FontWeight.w900,
+                        color: scheme.onSurface,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const SizedBox(width: 60),
+                    Text(
+                      'Level ${widget.level}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: IconButton(
+                        onPressed: _showHintMenu,
+                        icon: const Icon(Icons.settings_outlined),
+                      ),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Row(
+                    children: [
+                      _Pill(
+                        icon: Icons.arrow_forward_rounded,
+                        text: '$_remaining',
+                      ),
+                      const Spacer(),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(
+                          3,
+                          (index) {
+                            final alive = index < _hearts;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 2),
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 220),
+                                transitionBuilder: (child, animation) =>
+                                    ScaleTransition(
+                                  scale: animation,
+                                  child: child,
+                                ),
+                                child: Icon(
+                                  alive
+                                      ? Icons.favorite_rounded
+                                      : Icons.heart_broken_rounded,
+                                  key: ValueKey('$index-$alive'),
+                                  color: alive
+                                      ? Colors.redAccent
+                                      : Colors.grey,
+                                  size: 25,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const Spacer(),
+                      _Pill(text: _difficultyName()),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 0),
+                  child: Row(
+                    children: [
+                      Text(
+                        '⏱ ${_formatTime(_seconds)}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '🪙 $_coins',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _puzzle.columns / _puzzle.rows,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: AnimatedBuilder(
+                          animation: Listenable.merge([
+                            _wrongController,
+                            _clearController,
+                          ]),
+                          builder: (context, child) {
+                            return Transform.translate(
+                              offset: Offset(
+                                _wrongPoint == null
+                                    ? 0
+                                    : sin(_wrongController.value * pi * 6) * 7,
+                                0,
+                              ),
+                              child: CustomPaint(
+                                painter: _ArrowBoardPainter(
+                                  puzzle: _puzzle,
+                                  cleared: _cleared,
+                                  hints: _hintPath,
+                                  wrongPoint: _wrongPoint,
+                                  wrongProgress: _wrongController.value,
+                                  clearingPoint: _clearingPoint,
+                                  clearProgress: _clearController.value,
+                                ),
+                                child: GridView.builder(
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  itemCount:
+                                      _puzzle.rows * _puzzle.columns,
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: _puzzle.columns,
+                                  ),
+                                  itemBuilder: (_, index) {
+                                    final point = GridPoint(
+                                      index ~/ _puzzle.columns,
+                                      index % _puzzle.columns,
+                                    );
+                                    final hasArrow = _puzzle
+                                        .cellAt(point)
+                                        .arrows
+                                        .isNotEmpty;
+                                    return GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: hasArrow
+                                          ? () => _tapArrow(point)
+                                          : null,
+                                      child: const SizedBox.expand(),
+                                    );
+                                  },
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Text(
+                  _message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 18),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _RoundButton(
+                        icon: Icons.lightbulb_outline_rounded,
+                        badge: _freeHints,
+                        onTap: _showHintMenu,
+                      ),
+                      _RoundButton(
+                        icon: Icons.grid_3x3_rounded,
+                        onTap: _restart,
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Best ${_bestTime == null ? '--:--' : _formatTime(_bestTime!)}  •  Score $_bestScore',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            ),
+            if (_finished)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _winController,
+                    builder: (_, __) => Center(
+                      child: Transform.scale(
+                        scale: 1 + _winController.value * .2,
+                        child: Opacity(
+                          opacity: 1 - _winController.value * .1,
+                          child: const Icon(
+                            Icons.celebration,
+                            size: 110,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (_wrongPoint != null)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _wrongController,
+                    builder: (_, __) => Container(
+                      color: Colors.red.withValues(
+                        alpha: (1 - _wrongController.value) * .10,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (_paused)
+              const Positioned.fill(
+                child: ColoredBox(color: Colors.black26),
+              ),
+            if (_rewardAdLoading)
+              const Positioned.fill(
+                child: ColoredBox(color: Colors.black12),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+'''
+
+          path.write_text(text[:start] + build + text[end:])
+      - name: Format and verify
+        run: |
+          dart format lib/screens/arrow_game_screen.dart
+          flutter analyze
+          flutter test
+      - name: Commit fixed screen
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/screens/arrow_game_screen.dart
+          git diff --cached --quiet || git commit -m "Fix arrow game screen parser errors"
+          git push

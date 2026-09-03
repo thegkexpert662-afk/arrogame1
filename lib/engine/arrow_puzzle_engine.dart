@@ -32,8 +32,8 @@ class ArrowPuzzle {
 }
 
 /// Generates the connected-line "Tap to Clear" style used by the reference
-/// game: many separate bent arrow pieces with one arrow head at the tip.
-/// A generated board is accepted only when every piece can eventually clear.
+/// game: many separate short, bent arrow pieces with one arrow head at the tip.
+/// Levels 1-5 stay lighter; level 6+ uses a much denser, harder board.
 class ArrowPuzzleEngine {
   ArrowPuzzleEngine({Random? random}) : _random = random ?? Random();
 
@@ -48,9 +48,12 @@ class ArrowPuzzleEngine {
     final size = _sizeForDifficulty(d);
     final r = rows ?? size.$1;
     final c = columns ?? size.$2;
-    final pieceCount = min(r * c ~/ 4, 8 + d * 2);
+    final hard = d >= 6;
+    final pieceCount = hard
+        ? min(r * c ~/ 3, 65 + d * 4)
+        : min(r * c ~/ 4, 8 + d * 2);
 
-    for (var attempt = 0; attempt < 400; attempt++) {
+    for (var attempt = 0; attempt < 500; attempt++) {
       final cells = List<ArrowCell>.generate(
         r * c,
         (index) => ArrowCell(row: index ~/ c, col: index % c),
@@ -73,8 +76,10 @@ class ArrowPuzzleEngine {
         var placed = false;
 
         for (final direction in directions) {
-          final maxLength = min(5, 2 + (d ~/ 3));
-          final length = 2 + _random.nextInt(max(1, maxLength - 1));
+          final maxLength = hard ? 5 : min(5, 2 + (d ~/ 3));
+          final minLength = hard ? 3 : 2;
+          final length = minLength +
+              _random.nextInt(max(1, maxLength - minLength + 1));
           final path = _buildPath(
             endpoint,
             direction,
@@ -82,12 +87,13 @@ class ArrowPuzzleEngine {
             r,
             c,
             usedPathCells,
+            allowVisualOverlap: hard,
           );
           if (path == null) continue;
 
           endpoints.add(endpoint);
           paths[endpoint] = List.unmodifiable(path);
-          usedPathCells.addAll(path);
+          if (!hard) usedPathCells.addAll(path);
           cells[endpoint.row * c + endpoint.col].arrows.add(direction);
           placed = true;
           break;
@@ -96,7 +102,9 @@ class ArrowPuzzleEngine {
         if (placed) continue;
       }
 
-      if (endpoints.length < max(5, pieceCount ~/ 2)) continue;
+      if (endpoints.length < (hard ? pieceCount * 3 ~/ 4 : max(5, pieceCount ~/ 2))) {
+        continue;
+      }
 
       final puzzle = ArrowPuzzle(
         rows: r,
@@ -121,30 +129,56 @@ class ArrowPuzzleEngine {
     int rows,
     int columns,
     Set<GridPoint> used,
-  ) {
+    {bool allowVisualOverlap = false}) {
     // The line enters the arrow tip from the opposite direction.
     var current = endpoint.move(_opposite(arrowDirection));
-    if (current.row < 0 || current.row >= rows || current.col < 0 || current.col >= columns) {
+    if (current.row < 0 ||
+        current.row >= rows ||
+        current.col < 0 ||
+        current.col >= columns) {
       return null;
     }
-    if (used.contains(endpoint) || used.contains(current)) return null;
+    if (used.contains(endpoint) || (!allowVisualOverlap && used.contains(current))) {
+      return null;
+    }
 
     final path = <GridPoint>[endpoint, current];
     var previousDirection = _opposite(arrowDirection);
 
     for (var i = 2; i < length; i++) {
-      final options = <ArrowDirection>[previousDirection];
-      final perpendicular = previousDirection == ArrowDirection.up || previousDirection == ArrowDirection.down
-          ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]
-          : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];
-      options.addAll(perpendicular);
-      options.shuffle(_random);
+      final straight = <ArrowDirection>[previousDirection];
+      final perpendicular = previousDirection == ArrowDirection.up ||
+              previousDirection == ArrowDirection.down
+          ? <ArrowDirection>[
+              ArrowDirection.left,
+              ArrowDirection.right,
+            ]
+          : <ArrowDirection>[
+              ArrowDirection.up,
+              ArrowDirection.down,
+            ];
+
+      // Hard boards deliberately prefer a bend at every short segment.
+      final options = <ArrowDirection>[];
+      if (allowVisualOverlap) {
+        options.addAll(perpendicular);
+        if (_random.nextInt(4) == 0) options.addAll(straight);
+      } else {
+        options.addAll(straight);
+        options.addAll(perpendicular);
+        options.shuffle(_random);
+      }
 
       GridPoint? next;
       ArrowDirection? chosen;
       for (final direction in options) {
         final candidate = current.move(direction);
-        if (candidate.row < 0 || candidate.row >= rows || candidate.col < 0 || candidate.col >= columns) continue;
+        if (candidate.row < 0 ||
+            candidate.row >= rows ||
+            candidate.col < 0 ||
+            candidate.col >= columns) {
+          continue;
+        }
         if (used.contains(candidate) || path.contains(candidate)) continue;
         next = candidate;
         chosen = direction;
@@ -175,9 +209,12 @@ class ArrowPuzzleEngine {
   (int, int) _sizeForDifficulty(int difficulty) {
     if (difficulty <= 2) return (8, 10);
     if (difficulty <= 4) return (9, 11);
-    if (difficulty <= 6) return (10, 12);
-    if (difficulty <= 8) return (11, 13);
-    return (12, 14);
+    if (difficulty == 5) return (10, 12);
+    if (difficulty == 6) return (14, 17);
+    if (difficulty == 7) return (15, 18);
+    if (difficulty == 8) return (16, 18);
+    if (difficulty == 9) return (17, 19);
+    return (18, 20);
   }
 
   bool _isClearable(ArrowPuzzle puzzle) {

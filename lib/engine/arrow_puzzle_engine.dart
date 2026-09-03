@@ -41,9 +41,9 @@ class DenseArrowPuzzleEngine {
     final r = rows ?? size.$1;
     final c = columns ?? size.$2;
 
-    // The reference design fills the BOARD AREA with long paths, not with a
-    // separate tiny arrow in every cell. Long paths create the visual density.
-    final density = d >= 6 ? .24 : .18;
+    // Fewer long paths create the reference look: the BOARD is visually full,
+    // while each arrow is a large continuous L/S/zig-zag path.
+    final density = d >= 6 ? (.07 + (d - 6) * .003) : .14;
 
     final cells = List<ArrowCell>.generate(
       r * c,
@@ -63,12 +63,19 @@ class DenseArrowPuzzleEngine {
     final paths = <GridPoint, List<GridPoint>>{};
 
     for (final point in selected) {
-      final direction = _nearestEdgeDirection(point, r, c);
+      final path = _makeLongBentPath(
+        point,
+        _nearestEdgeDirection(point, r, c),
+        r,
+        c,
+        d,
+      );
+      final direction = path.length >= 2
+          ? _directionBetween(path[path.length - 2], path.last)
+          : _nearestEdgeDirection(point, r, c);
       cells[point.row * c + point.col].arrows.add(direction);
       points.add(point);
-      paths[point] = List.unmodifiable(
-        _makeLongBentPath(point, direction, r, c, d),
-      );
+      paths[point] = List.unmodifiable(path);
     }
 
     points.sort(
@@ -86,6 +93,15 @@ class DenseArrowPuzzleEngine {
     );
   }
 
+  ArrowDirection _directionBetween(GridPoint from, GridPoint to) {
+    final dr = to.row - from.row;
+    final dc = to.col - from.col;
+    if (dr < 0) return ArrowDirection.up;
+    if (dr > 0) return ArrowDirection.down;
+    if (dc < 0) return ArrowDirection.left;
+    return ArrowDirection.right;
+  }
+
   List<GridPoint> _makeLongBentPath(
     GridPoint start,
     ArrowDirection direction,
@@ -97,18 +113,13 @@ class DenseArrowPuzzleEngine {
     final used = <GridPoint>{start};
     var current = start;
     var heading = direction;
-
-    // 6–12 grid points gives the same long L/S/zig-zag feel as the reference.
     final wanted = difficulty >= 9
-        ? 9 + _random.nextInt(4)
-        : 6 + _random.nextInt(4);
+        ? 10 + _random.nextInt(4)
+        : 7 + _random.nextInt(4);
 
     for (var step = 1; step < wanted; step++) {
       var candidates = <ArrowDirection>[heading];
-
-      // Force frequent 90° turns. Every other segment is a turn, with an
-      // occasional straight segment to keep the paths readable.
-      if (step >= 2 && (step.isEven || _random.nextDouble() < .65)) {
+      if (step >= 2 && (step.isEven || _random.nextDouble() < .72)) {
         candidates = heading == ArrowDirection.up || heading == ArrowDirection.down
             ? <ArrowDirection>[ArrowDirection.left, ArrowDirection.right]
             : <ArrowDirection>[ArrowDirection.up, ArrowDirection.down];

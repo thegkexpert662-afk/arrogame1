@@ -24,17 +24,12 @@ class ArrowPuzzle {
   ArrowCell cellAt(GridPoint point) => cells[point.row * columns + point.col];
 
   bool contains(GridPoint point) =>
-      point.row >= 0 &&
-      point.row < rows &&
-      point.col >= 0 &&
-      point.col < columns;
+      point.row >= 0 && point.row < rows && point.col >= 0 && point.col < columns;
 }
 
 /// Procedural generator for arrow-path puzzles.
-///
 /// Generation always starts with a guaranteed path, then adds decoys and
-/// dead-end traps. Every generated puzzle is verified with a real path search
-/// before it is returned, so an unsolvable board is never accepted.
+/// dead-end traps. Every generated puzzle is verified before it is returned.
 class ArrowPuzzleEngine {
   ArrowPuzzleEngine({Random? random}) : _random = random ?? Random();
 
@@ -45,7 +40,7 @@ class ArrowPuzzleEngine {
     int? columns,
     int difficulty = 1,
   }) {
-    final level = difficulty.clamp(1, 10);
+    final int level = difficulty.clamp(1, 10).toInt();
     final size = _sizeForDifficulty(level);
     final r = rows ?? size.$1;
     final c = columns ?? size.$2;
@@ -56,7 +51,6 @@ class ArrowPuzzleEngine {
 
     final fingerprints = <String>{};
 
-    // Multiple attempts protect generation from unlucky random layouts.
     for (var attempt = 0; attempt < 250; attempt++) {
       final start = GridPoint(_random.nextInt(r), 0);
       final finish = GridPoint(_random.nextInt(r), c - 1);
@@ -93,16 +87,15 @@ class ArrowPuzzleEngine {
       final fingerprint = _fingerprint(puzzle);
       if (!fingerprints.add(fingerprint)) continue;
 
-      // Verify both the authored solution and the actual board reachability.
+      // Verify the stored solution and the actual arrows independently.
       if (validateSolution(puzzle) && findSolutionPath(puzzle) != null) {
         return puzzle;
       }
     }
 
-    throw StateError('Could not generate a valid unique arrow puzzle.');
+    throw StateError('Could not generate a valid arrow puzzle.');
   }
 
-  /// Board size grows with difficulty.
   (int, int) _sizeForDifficulty(int difficulty) {
     if (difficulty <= 2) return (6, 8);
     if (difficulty <= 4) return (7, 9);
@@ -111,10 +104,9 @@ class ArrowPuzzleEngine {
     return (12, 16);
   }
 
-  /// Creates a guaranteed simple-to-complex route using only progress toward
-  /// the finish: every horizontal step moves right and every vertical step
-  /// moves toward the finish row. The ordering is randomized, producing many
-  /// different valid routes while never creating a loop in the solution.
+  /// Builds a guaranteed route. Horizontal progress is always to the right;
+  /// vertical progress is always toward the finish row. The order is random,
+  /// creating many layouts without introducing cycles into the authored path.
   List<GridPoint> _makeGuaranteedSolutionPath(
     int rows,
     int columns,
@@ -138,15 +130,17 @@ class ArrowPuzzleEngine {
       horizontal.add(GridPoint(row, col));
     }
 
-    // Randomly interleave vertical and horizontal progress. We never move
-    // backwards, so every produced path is valid and cycle-free.
     final verticalQueue = Queue<GridPoint>.from(vertical);
     final horizontalQueue = Queue<GridPoint>.from(horizontal);
 
     while (verticalQueue.isNotEmpty || horizontalQueue.isNotEmpty) {
       final takeVertical = horizontalQueue.isEmpty ||
           (verticalQueue.isNotEmpty && _random.nextBool());
-      path.add(takeVertical ? verticalQueue.removeFirst() : horizontalQueue.removeFirst());
+      path.add(
+        takeVertical
+            ? verticalQueue.removeFirst()
+            : horizontalQueue.removeFirst(),
+      );
     }
 
     return path;
@@ -176,9 +170,8 @@ class ArrowPuzzleEngine {
     final solutionSet = solution.toSet();
     final profile = _difficultyProfile(difficulty);
 
-    // First create real trap targets: empty cells that can be entered but
-    // cannot continue. Some neighbouring cells then point into those traps.
-    final trapTargets = <GridPoint>[];
+    // Empty trap targets act as true dead ends. Nearby decoy cells point into
+    // them, creating paths that can be entered but cannot be continued.
     final candidates = cells
         .map((cell) => GridPoint(cell.row, cell.col))
         .where((point) =>
@@ -190,7 +183,7 @@ class ArrowPuzzleEngine {
       candidates.length,
       max(1, (candidates.length * profile.trapChance).round()),
     );
-    trapTargets.addAll(candidates.take(targetCount));
+    final trapTargets = candidates.take(targetCount).toList();
 
     for (final target in trapTargets) {
       final feeders = <GridPoint>[];
@@ -209,8 +202,7 @@ class ArrowPuzzleEngine {
       }
     }
 
-    // Fill non-solution cells with controlled decoy arrows. Decoys are what
-    // make the board feel like a real puzzle rather than a single corridor.
+    // Controlled decoys make non-solution regions meaningful.
     for (final cell in cells) {
       final point = GridPoint(cell.row, cell.col);
       if (point == solution.last || solutionSet.contains(point)) continue;
@@ -225,14 +217,14 @@ class ArrowPuzzleEngine {
       if (_random.nextDouble() < profile.decoyChance) {
         cell.arrows.add(possible.first);
       }
-
-      if (possible.length > 1 && _random.nextDouble() < profile.extraArrowChance) {
+      if (possible.length > 1 &&
+          _random.nextDouble() < profile.extraArrowChance) {
         cell.arrows.add(possible[1]);
       }
     }
 
-    // Add occasional alternative exits from solution cells. This introduces
-    // optional routes and traps without removing the guaranteed solution.
+    // Some solution cells receive an optional exit into the decoy network.
+    // The guaranteed solution arrow is never removed.
     for (var i = 0; i < solution.length - 1; i++) {
       if (_random.nextDouble() >= profile.solutionDecoyChance) continue;
       final point = solution[i];
@@ -250,7 +242,7 @@ class ArrowPuzzleEngine {
   }
 
   _DifficultyProfile _difficultyProfile(int difficulty) {
-    final d = difficulty.clamp(1, 10);
+    final int d = difficulty.clamp(1, 10).toInt();
     return _DifficultyProfile(
       decoyChance: min(0.82, 0.25 + d * 0.055),
       extraArrowChance: min(0.55, 0.05 + d * 0.035),
@@ -306,9 +298,7 @@ class ArrowPuzzleEngine {
     return true;
   }
 
-  /// Searches the actual arrows on the board and returns one real route to
-  /// the finish. This catches accidental unsolvable puzzles independently of
-  /// the generator's stored solution.
+  /// Searches the actual board arrows and returns a real route to the finish.
   List<GridPoint>? findSolutionPath(ArrowPuzzle puzzle) {
     final parent = <GridPoint, GridPoint?>{puzzle.start: null};
     final queue = Queue<GridPoint>()..add(puzzle.start);
@@ -326,14 +316,13 @@ class ArrowPuzzleEngine {
         queue.add(next);
       }
     }
-
     return null;
   }
 
   bool isSolvable(ArrowPuzzle puzzle) => findSolutionPath(puzzle) != null;
 
-  /// Returns up to [limit] distinct solution routes. Useful for balancing
-  /// difficulty later: a puzzle may intentionally have one or several routes.
+  /// Counts up to [limit] distinct routes. Keeping a small cap avoids doing
+  /// expensive exhaustive searches on high-difficulty boards.
   int countSolutions(ArrowPuzzle puzzle, {int limit = 2}) {
     if (limit < 1) return 0;
     var found = 0;
@@ -345,6 +334,7 @@ class ArrowPuzzleEngine {
         found++;
         return;
       }
+
       visited.add(current);
       for (final direction in puzzle.cellAt(current).arrows) {
         final next = current.move(direction);
@@ -373,6 +363,8 @@ class ArrowPuzzleEngine {
     return path.reversed.toList(growable: false);
   }
 
+  /// Fingerprint prevents the generator from accepting the same board twice
+  /// during retry attempts and gives a stable basis for duplicate detection.
   String _fingerprint(ArrowPuzzle puzzle) {
     final buffer = StringBuffer()
       ..write('${puzzle.rows}x${puzzle.columns}|')
@@ -380,10 +372,7 @@ class ArrowPuzzleEngine {
       ..write('${puzzle.finish.row},${puzzle.finish.col}|');
 
     for (final cell in puzzle.cells) {
-      buffer.write(cell.row);
-      buffer.write(',');
-      buffer.write(cell.col);
-      buffer.write(':');
+      buffer.write('${cell.row},${cell.col}:');
       final arrows = cell.arrows.map((d) => d.index).toList()..sort();
       buffer.write(arrows.join(','));
       buffer.write(';');

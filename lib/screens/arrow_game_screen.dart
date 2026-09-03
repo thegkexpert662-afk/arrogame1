@@ -11,7 +11,6 @@ import '../services/level_progress_service.dart';
 
 class ArrowGameScreen extends StatefulWidget {
   const ArrowGameScreen({super.key, required this.level});
-
   final int level;
 
   @override
@@ -21,20 +20,14 @@ class ArrowGameScreen extends StatefulWidget {
 class _ArrowGameScreenState extends State<ArrowGameScreen>
     with TickerProviderStateMixin {
   final ArrowPuzzleEngine _engine = ArrowPuzzleEngine();
-  final GameplayFeedbackService _feedback = GameplayFeedbackService.instance;
-  final AdService _ads = AdService.instance;
+  final _feedback = GameplayFeedbackService.instance;
+  final _ads = AdService.instance;
 
   late ArrowPuzzle _puzzle;
   late List<GridPoint> _solution;
-
   final Set<GridPoint> _cleared = <GridPoint>{};
   final Set<GridPoint> _hintPath = <GridPoint>{};
-
   Timer? _timer;
-  late AnimationController _winController;
-  late AnimationController _wrongController;
-  late AnimationController _clearController;
-
   int _seconds = 0;
   int _moves = 0;
   int _freeHints = 3;
@@ -42,27 +35,20 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   int _hearts = 3;
   int _bestScore = 0;
   int? _bestTime;
-
   bool _finished = false;
   bool _paused = false;
   bool _rewardAdLoading = false;
-
   GridPoint? _wrongPoint;
   GridPoint? _clearingPoint;
   String _message = 'Tap a free arrow to clear it';
+  late AnimationController _winController;
+  late AnimationController _wrongController;
+  late AnimationController _clearController;
 
   int get _difficulty => min(10, 6 + ((widget.level - 1) ~/ 10));
-
   int get _totalArrows =>
       _puzzle.cells.where((cell) => cell.arrows.isNotEmpty).length;
-
   int get _remaining => _totalArrows - _cleared.length;
-
-  String get _difficultyName {
-    if (_difficulty <= 5) return 'MEDIUM';
-    if (_difficulty <= 8) return 'HARD';
-    return 'EXTREME';
-  }
 
   @override
   void initState() {
@@ -95,9 +81,7 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
   Future<void> _loadLevel() async {
     final score = await LevelProgressService.instance.bestScore(widget.level);
     final time = await LevelProgressService.instance.bestTime(widget.level);
-
     if (!mounted) return;
-
     setState(() {
       _bestScore = score ?? 0;
       _bestTime = time;
@@ -107,13 +91,11 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
 
   void _newPuzzle() {
     _timer?.cancel();
-
     final random = Random(widget.level * 1000003 + _difficulty);
     _puzzle = ArrowPuzzleEngine(random: random).generate(
       difficulty: _difficulty,
     );
     _solution = _engine.findSolutionPath(_puzzle);
-
     _cleared.clear();
     _hintPath.clear();
     _wrongPoint = null;
@@ -125,31 +107,24 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
     _finished = false;
     _paused = false;
     _message = 'Tap a free arrow to clear it';
-
     _winController.reset();
     _wrongController.reset();
     _clearController.reset();
-
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _finished || _paused) return;
-      setState(() => _seconds++);
+      if (mounted && !_finished && !_paused) {
+        setState(() => _seconds++);
+      }
     });
   }
 
-  int _score() {
-    return max(
-      100,
-      1000 + (_difficulty * 250) - (_moves * 5) - (_seconds * 2),
-    );
-  }
+  int _score() =>
+      max(100, 1000 + (_difficulty * 250) - (_moves * 5) - (_seconds * 2));
 
   Future<void> _completeLevel() async {
     _finished = true;
     _timer?.cancel();
-
     await _feedback.win();
     await _winController.forward();
-
     final score = _score();
     await LevelProgressService.instance.completeLevel(
       level: widget.level,
@@ -157,74 +132,62 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       timeSeconds: _seconds,
     );
     await _ads.showInterstitialAfterLevel();
-
     if (!mounted) return;
-
     setState(() {
       _bestScore = max(_bestScore, score);
       _bestTime = _bestTime == null ? _seconds : min(_bestTime!, _seconds);
     });
-
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('🎉 Level Complete!'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Level ${widget.level} • $_difficultyName'),
-              const SizedBox(height: 10),
-              Text(
-                'Score: $score',
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text('Time: ${_formatTime(_seconds)}'),
-              Text('Moves: $_moves'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _restart();
-              },
-              child: const Text('REPLAY'),
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('🎉 Level Complete!'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Level ${widget.level} • ${_difficultyName}'),
+            const SizedBox(height: 10),
+            Text(
+              'Score: $score',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                Navigator.pop(context);
-              },
-              child: const Text('LEVELS'),
-            ),
+            Text('Time: ${_formatTime(_seconds)}'),
+            Text('Moves: $_moves'),
           ],
-        );
-      },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _restart();
+            },
+            child: const Text('REPLAY'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              Navigator.pop(context);
+            },
+            child: const Text('LEVELS'),
+          ),
+        ],
+      ),
     );
   }
 
   Future<void> _showWrongAnimation(GridPoint point) async {
     if (!mounted) return;
-
     setState(() {
       _wrongPoint = point;
       _message = '🔒 Blocked! Clear the arrow in front first.';
     });
-
     await _wrongController.forward(from: 0);
-
     if (!mounted) return;
     setState(() => _wrongPoint = null);
   }
 
   Future<void> _showClearAnimation(GridPoint point) async {
     if (!mounted) return;
-
     setState(() {
       _clearingPoint = point;
       _cleared.add(point);
@@ -234,40 +197,32 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
           ? '✨ One more arrow!'
           : '✓ Cleared! Find the next free arrow';
     });
-
     await _clearController.forward(from: 0);
-
     if (!mounted) return;
     setState(() => _clearingPoint = null);
   }
 
   Future<void> _tapArrow(GridPoint point) async {
-    if (_finished || _paused || _cleared.contains(point)) return;
-    if (_clearingPoint != null) return;
-
+    if (_finished || _paused || _cleared.contains(point) || _clearingPoint != null) {
+      return;
+    }
     final cell = _puzzle.cellAt(point);
     if (cell.arrows.isEmpty) return;
 
     if (!_engine.canClear(_puzzle, point, _cleared)) {
       await _feedback.wrongMove();
-
       if (!mounted) return;
       setState(() => _hearts = _feedback.lives);
       await _showWrongAnimation(point);
-
       if (!mounted) return;
-
       if (_hearts <= 0) {
         await Future<void>.delayed(const Duration(milliseconds: 220));
         if (!mounted) return;
-
-        setState(() {
-          _message = '💔 No hearts left — restarting this level…';
-        });
-
+        setState(
+          () => _message = '💔 No hearts left — restarting this level…',
+        );
         await Future<void>.delayed(const Duration(milliseconds: 650));
         if (!mounted) return;
-
         setState(_newPuzzle);
       }
       return;
@@ -275,7 +230,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
 
     unawaited(_feedback.clearArrow());
     await _showClearAnimation(point);
-
     if (_cleared.length >= _totalArrows) {
       await _completeLevel();
     }
@@ -292,11 +246,9 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       setState(() => _message = 'No free hints left.');
       return;
     }
-
     final next = _solution
         .where((point) => !_cleared.contains(point))
         .firstOrNull;
-
     if (next != null) {
       setState(() {
         _hintPath
@@ -312,7 +264,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       setState(() => _message = 'No free hints left.');
       return;
     }
-
     setState(() {
       _hintPath
         ..clear()
@@ -326,7 +277,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       setState(() => _message = 'Need 5 coins for a full solution hint.');
       return;
     }
-
     setState(() {
       _coins -= 5;
       _hintPath
@@ -338,20 +288,16 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
 
   Future<void> _rewardAdHint() async {
     if (_rewardAdLoading) return;
-
     setState(() {
       _rewardAdLoading = true;
       _message = 'Loading Reward Ad…';
     });
-
     final shown = await _ads.showRewarded(
       onReward: (_) {
         if (!mounted) return;
-
         final next = _solution
             .where((point) => !_cleared.contains(point))
             .firstOrNull;
-
         setState(() {
           _freeHints++;
           if (next != null) {
@@ -363,78 +309,70 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
         });
       },
     );
-
     if (!mounted) return;
-
     setState(() {
       _rewardAdLoading = false;
-      if (!shown) {
-        _message = 'Reward Ad is not ready. Try again shortly.';
-      }
+      if (!shown) _message = 'Reward Ad is not ready. Try again shortly.';
     });
   }
 
   Future<void> _showHintMenu() async {
     if (_finished || _paused) return;
-
     await showModalBottomSheet<void>(
       context: context,
-      builder: (sheetContext) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              const ListTile(
-                title: Text(
-                  '💡 Helpful Hints',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            const ListTile(
+              title: Text(
+                '💡 Helpful Hints',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              ListTile(
-                leading: const Icon(Icons.lightbulb_outline),
-                title: const Text('Next free arrow'),
-                subtitle: Text('Free hints: $_freeHints'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _nextHint();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.route),
-                title: const Text('Show clear path'),
-                subtitle: const Text('Highlights a valid clearing order'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _pathHint();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.monetization_on_outlined),
-                title: const Text('Full solution'),
-                subtitle: const Text('Costs 5 coins'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _fullSolutionHint();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.ondemand_video),
-                title: const Text('Reward Ad → Hint'),
-                subtitle: const Text('+1 hint after watching the ad'),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _rewardAdHint();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+            ),
+            ListTile(
+              leading: const Icon(Icons.lightbulb_outline),
+              title: const Text('Next free arrow'),
+              subtitle: Text('Free hints: $_freeHints'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _nextHint();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.route),
+              title: const Text('Show clear path'),
+              subtitle: const Text('Highlights a valid clearing order'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _pathHint();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.monetization_on_outlined),
+              title: const Text('Full solution'),
+              subtitle: const Text('Costs 5 coins'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _fullSolutionHint();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.ondemand_video),
+              title: const Text('Reward Ad → Hint'),
+              subtitle: const Text('+1 hint after watching the ad'),
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _rewardAdHint();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Future<void> _pauseResume() async {
     if (_finished) return;
-
     if (_paused) {
       setState(() {
         _paused = false;
@@ -442,59 +380,50 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
       });
       return;
     }
-
     setState(() {
       _paused = true;
       _message = 'Game paused';
     });
-
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('⏸ Paused'),
-          content: const Text('Your timer is paused.'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                _restart();
-              },
-              child: const Text('RESTART'),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                if (mounted) {
-                  setState(() {
-                    _paused = false;
-                    _message = 'Game resumed';
-                  });
-                }
-              },
-              child: const Text('RESUME'),
-            ),
-          ],
-        );
-      },
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('⏸ Paused'),
+        content: const Text('Your timer is paused.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _restart();
+            },
+            child: const Text('RESTART'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              if (mounted) setState(() => _paused = false);
+            },
+            child: const Text('RESUME'),
+          ),
+        ],
+      ),
     );
   }
 
-  void _restart() {
-    setState(_newPuzzle);
+  void _restart() => setState(_newPuzzle);
+
+  String get _difficultyName {
+    if (_difficulty <= 5) return 'MEDIUM';
+    if (_difficulty <= 8) return 'HARD';
+    return 'EXTREME';
   }
 
-  String _formatTime(int seconds) {
-    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
-    final remainingSeconds = (seconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$remainingSeconds';
-  }
+  String _formatTime(int seconds) =>
+      '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8F5EA),
       appBar: AppBar(
@@ -558,7 +487,10 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
               padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Row(
                 children: [
-                  _Pill(icon: Icons.arrow_forward_rounded, text: '$_remaining'),
+                  _Pill(
+                    icon: Icons.arrow_forward_rounded,
+                    text: '$_remaining',
+                  ),
                   const Spacer(),
                   _Hearts(count: _hearts),
                   const Spacer(),
@@ -627,7 +559,6 @@ class _ArrowGameScreenState extends State<ArrowGameScreen>
                                     .cellAt(point)
                                     .arrows
                                     .isNotEmpty;
-
                                 return GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: hasArrow ? () => _tapArrow(point) : null,
@@ -756,7 +687,9 @@ class _ArrowBoardPainter extends CustomPainter {
           col * cellWidth + cellWidth / 2,
           row * cellHeight + cellHeight / 2,
         );
-        final direction = cell.arrows.first.direction;
+        // ArrowCell.arrows is a Set<ArrowDirection>, so the first item is
+        // already an ArrowDirection; there is no nested .direction field.
+        final direction = cell.arrows.first;
 
         final isHint = hints.contains(point);
         final isWrong = wrongPoint == point;

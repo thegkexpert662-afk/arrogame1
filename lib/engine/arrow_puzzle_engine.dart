@@ -27,7 +27,8 @@ class DenseArrowPuzzle {
 }
 
 /// Deterministic dense Tap-to-Clear generator.
-/// Hard boards fill every tile and point arrows toward a nearest edge.
+/// Every hard board is filled with arrows and every arrow points to a nearest
+/// edge. Therefore there is always at least one valid clearing order.
 class DenseArrowPuzzleEngine {
   DenseArrowPuzzleEngine({Random? random}) : _random = random ?? Random();
 
@@ -63,8 +64,13 @@ class DenseArrowPuzzleEngine {
       points.add(point);
     }
 
-    points.sort((a, b) =>
-        _edgeDistance(a, r, c).compareTo(_edgeDistance(b, r, c)));
+    // Valid moves are ordered from the outside toward the centre. Ties are
+    // harmless because tied arrows point toward different nearest edges.
+    points.sort((a, b) {
+      final da = _edgeDistance(a, r, c);
+      final db = _edgeDistance(b, r, c);
+      return da.compareTo(db);
+    });
 
     return DenseArrowPuzzle(
       rows: r,
@@ -105,12 +111,8 @@ class DenseArrowPuzzleEngine {
     return (18, 20);
   }
 
-  bool _rayClear(
-    DenseArrowPuzzle puzzle,
-    Set<GridPoint> occupied,
-    GridPoint from,
-    ArrowDirection direction,
-  ) {
+  bool _rayClear(DenseArrowPuzzle puzzle, Set<GridPoint> occupied,
+      GridPoint from, ArrowDirection direction) {
     var next = from.move(direction);
     while (puzzle.contains(next)) {
       if (occupied.contains(next)) return false;
@@ -119,11 +121,7 @@ class DenseArrowPuzzleEngine {
     return true;
   }
 
-  bool canClear(
-    DenseArrowPuzzle puzzle,
-    GridPoint point,
-    Set<GridPoint> cleared,
-  ) {
+  bool canClear(DenseArrowPuzzle puzzle, GridPoint point, Set<GridPoint> cleared) {
     if (!puzzle.contains(point) || cleared.contains(point)) return false;
     final cell = puzzle.cellAt(point);
     if (cell.arrows.isEmpty) return false;
@@ -133,15 +131,6 @@ class DenseArrowPuzzleEngine {
       if (item.arrows.isNotEmpty && !cleared.contains(p)) occupied.add(p);
     }
     return _rayClear(puzzle, occupied, point, cell.arrows.first);
-  }
-
-  bool canMove(
-    DenseArrowPuzzle puzzle,
-    GridPoint from,
-    ArrowDirection direction,
-  ) {
-    if (!puzzle.contains(from)) return false;
-    return puzzle.cellAt(from).has(direction);
   }
 
   List<GridPoint> findSolutionPath(DenseArrowPuzzle puzzle) {
@@ -159,57 +148,14 @@ class DenseArrowPuzzleEngine {
           break;
         }
       }
-      if (next == null) return List<GridPoint>.from(puzzle.solution);
+      if (next == null) {
+        // The generator is deterministic, so this is only a defensive guard.
+        return puzzle.solution;
+      }
       cleared.add(next);
       remaining.remove(next);
       result.add(next);
     }
     return result;
   }
-
-  bool validateSolution(DenseArrowPuzzle puzzle) =>
-      findSolutionPath(puzzle).length == puzzle.solution.length;
-
-  bool isSolvable(DenseArrowPuzzle puzzle) =>
-      findSolutionPath(puzzle).length == puzzle.solution.length;
-
-  int countSolutions(DenseArrowPuzzle puzzle, {int limit = 2}) {
-    if (limit < 1) return 0;
-    // Dense guaranteed boards can have many valid orders. Returning the cap
-    // is sufficient for the existing "is there more than one?" test contract.
-    return min(limit, 2);
-  }
-}
-
-// Backward-compatible names used by existing gameplay/tests.
-typedef ArrowPuzzle = DenseArrowPuzzle;
-
-class ArrowPuzzleEngine extends DenseArrowPuzzleEngine {
-  ArrowPuzzleEngine({Random? random}) : super(random: random);
-
-  @override
-  ArrowPuzzle generate({int? rows, int? columns, int difficulty = 6}) =>
-      super.generate(rows: rows, columns: columns, difficulty: difficulty);
-
-  @override
-  bool canClear(ArrowPuzzle puzzle, GridPoint point, Set<GridPoint> cleared) =>
-      super.canClear(puzzle, point, cleared);
-
-  @override
-  List<GridPoint> findSolutionPath(ArrowPuzzle puzzle) =>
-      super.findSolutionPath(puzzle);
-
-  @override
-  bool canMove(ArrowPuzzle puzzle, GridPoint from, ArrowDirection direction) =>
-      super.canMove(puzzle, from, direction);
-
-  @override
-  bool validateSolution(ArrowPuzzle puzzle) => super.validateSolution(puzzle);
-
-  @override
-  bool isSolvable(ArrowPuzzle puzzle) => super.isSolvable(puzzle);
-
-  @override
-  int countSolutions(ArrowPuzzle puzzle, {int limit = 2}) =>
-      super.countSolutions(puzzle, limit: limit);
 }

@@ -35,22 +35,19 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
       level = (args['level'] as int?) ?? 1;
-      final d = args['difficulty'] as String?;
-      difficulty = _parseDifficulty(d);
+      difficulty = _parseDifficulty(args['difficulty'] as String?);
     }
     engine = ArrowPuzzleEngine.forLevel(level, difficulty: difficulty);
   }
 
-  PuzzleDifficulty _parseDifficulty(String? value) {
-    return switch (value) {
-      'Easy' => PuzzleDifficulty.easy,
-      'Hard' => PuzzleDifficulty.hard,
-      'Expert' => PuzzleDifficulty.expert,
-      _ => PuzzleDifficulty.normal,
-    };
-  }
+  PuzzleDifficulty _parseDifficulty(String? value) => switch (value) {
+        'Easy' => PuzzleDifficulty.easy,
+        'Hard' => PuzzleDifficulty.hard,
+        'Expert' => PuzzleDifficulty.expert,
+        _ => PuzzleDifficulty.normal,
+      };
 
-  Future<void> _move(int index, Size boardSize) async {
+  Future<void> _move(int index) async {
     if (busy || !mounted) return;
     final selected = engine.arrows[index].copy();
     if (!engine.canMove(index)) {
@@ -77,10 +74,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       busy = false;
     });
     if (engine.completed) {
-      final stars = _stars();
       Navigator.pushReplacementNamed(context, '/result', arguments: {
         'level': level,
-        'stars': stars,
+        'stars': _stars(),
         'moves': engine.moves,
         'difficulty': ArrowPuzzleEngine.difficultyName(difficulty),
       });
@@ -88,14 +84,13 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   }
 
   int _stars() {
-    final target = switch (difficulty) {
-      PuzzleDifficulty.easy => 1.35,
-      PuzzleDifficulty.normal => 1.55,
-      PuzzleDifficulty.hard => 1.80,
-      PuzzleDifficulty.expert => 2.10,
+    final limit = switch (difficulty) {
+      PuzzleDifficulty.easy => engine.initialCount + 2,
+      PuzzleDifficulty.normal => engine.initialCount + 4,
+      PuzzleDifficulty.hard => engine.initialCount + 6,
+      PuzzleDifficulty.expert => engine.initialCount + 8,
     };
-    final ratio = engine.arrows.length + engine.moves == 0 ? 1.0 : (engine.moves / max(1, engine.moves));
-    if (ratio <= target && lives == 3) return 3;
+    if (engine.moves <= limit && lives == 3) return 3;
     if (lives >= 2) return 2;
     return 1;
   }
@@ -131,7 +126,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   void _tap(Offset position, Size size) {
     for (var i = engine.arrows.length - 1; i >= 0; i--) {
       if (engine.hitTest(i, position, size)) {
-        _move(i, size);
+        _move(i);
         return;
       }
     }
@@ -238,7 +233,7 @@ class ArrowBoardPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 5.5
       ..strokeCap = StrokeCap.round
-      ..color = orange.withValues(alpha: .30);
+      ..color = orange.withOpacity(.30);
 
     for (var i = 0; i < arrows.length; i++) {
       _drawArrow(canvas, size, arrows[i], i == hintIndex ? hintPaint : base, head);

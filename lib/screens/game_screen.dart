@@ -1,0 +1,15 @@
+import 'dart:math';
+import 'package:flutter/material.dart';
+import '../app_widgets.dart';
+import '../models/arrow.dart';
+import '../engine/arrow_puzzle_engine.dart';
+
+class GameScreen extends StatefulWidget { const GameScreen({super.key}); @override State<GameScreen> createState()=>_GameScreenState(); }
+class _GameScreenState extends State<GameScreen>{ late ArrowPuzzleEngine engine; int level=1; @override void initState(){super.initState();engine=ArrowPuzzleEngine.demo(level);}
+ void move(int i){ if(engine.moveArrow(i)){setState((){});if(engine.completed)Future.delayed(const Duration(milliseconds:350),()=>Navigator.pushNamed(context,'/result',arguments:engine));} }
+ @override Widget build(BuildContext c)=>Scaffold(backgroundColor:bg,appBar:AppBar(backgroundColor:bg,elevation:0,centerTitle:true,leading:IconButton(icon:const Icon(Icons.arrow_back,color:brown),onPressed:()=>Navigator.pop(c)),title:Column(children:[Text('Level $level',style:const TextStyle(color:brown,fontWeight:FontWeight.bold)),const Text('Hard',style:TextStyle(color:Colors.deepPurple,fontWeight:FontWeight.bold,fontSize:15))]),actions:[IconButton(icon:const Icon(Icons.palette_outlined,color:brown),onPressed:(){}),IconButton(icon:const Icon(Icons.settings_outlined,color:brown),onPressed:()=>Navigator.pushNamed(c,'/settings'))]),body:Column(children:[Padding(padding:const EdgeInsets.symmetric(horizontal:22,vertical:12),child:Row(children:[...List.generate(3,(i)=>const Padding(padding:EdgeInsets.only(right:12),child:Icon(Icons.water_drop,color:blue,size:42))),const Spacer(),IconButton(icon:const Icon(Icons.lightbulb_outline,color:brown,size:34),onPressed:()=>setState(engine.hint))])),Expanded(child:Padding(padding:const EdgeInsets.symmetric(horizontal:12),child:GestureDetector(onTapUp:(d)=>_tap(d.localPosition),child:CustomPaint(painter:ArrowBoardPainter(engine.arrows),child:const SizedBox.expand())))),Padding(padding:const EdgeInsets.fromLTRB(18,8,18,22),child:Row(children:[softButton('Undo',Icons.undo,()=>setState(engine.undo())),softButton('Reset',Icons.refresh,()=>setState(engine.reset())),softButton('Hint',Icons.lightbulb_outline,()=>setState(engine.hint()))]))]);
+ void _tap(Offset p){final size=context.size??const Size(360,700);for(var i=engine.arrows.length-1;i>=0;i--){if(engine.hitTest(i,p,size)) {move(i);break;}}}
+}
+class ArrowBoardPainter extends CustomPainter{final List<Arrow> arrows;ArrowBoardPainter(this.arrows);@override void paint(Canvas c,Size s){final p=Paint()..style=PaintingStyle.stroke..strokeWidth=2.2..strokeCap=StrokeCap.round..color=brown;final a=Paint()..style=PaintingStyle.stroke..strokeWidth=3.0..strokeCap=StrokeCap.round..color=orange;for(final x in arrows){final start=Offset(x.x*s.width,x.y*s.height);final v=x.direction.vector;final end=start+Offset(v.dx*x.length*min(s.width,s.height),v.dy*x.length*min(s.width,s.height));c.drawLine(start,end,p);_arrow(c,end,v,a);} }
+ void _arrow(Canvas c,Offset e,Offset v,Paint p){final perp=Offset(-v.dy,v.dx);c.drawLine(e,e-Offset(v.dx*11,v.dy*11)+perp*6,p);c.drawLine(e,e-Offset(v.dx*11,v.dy*11)-perp*6,p);}
+ @override bool shouldRepaint(covariant ArrowBoardPainter o)=>true;}

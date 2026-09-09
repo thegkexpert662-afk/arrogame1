@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../app_widgets.dart';
 import '../engine/arrow_puzzle_engine.dart';
@@ -128,7 +129,7 @@ class _LevelSelectState extends State<LevelSelectScreen> {
   Future<void> _load() async {
     final u = await ProgressStore.unlockedLevel();
     if (!mounted) return;
-    setState(() => unlocked = u.clamp(1, 100));
+    setState(() => unlocked = u.clamp(1, 100).toInt());
     for (var i = 1; i <= unlocked; i++) {
       stars[i] = await ProgressStore.stars(i);
     }

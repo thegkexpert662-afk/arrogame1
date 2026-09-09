@@ -7,48 +7,67 @@ class AppScaffold extends StatelessWidget {
   final Widget body;
   final Widget? trailing;
   const AppScaffold({super.key, required this.title, required this.body, this.trailing});
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: bg,
-    appBar: AppBar(
-      backgroundColor: bg,
-      elevation: 0,
-      centerTitle: true,
-      leading: IconButton(icon: const Icon(Icons.arrow_back, color: brown), onPressed: () => Navigator.pop(context)),
-      title: Text(title, style: const TextStyle(color: brown, fontWeight: FontWeight.bold)),
-      actions: [if (trailing != null) trailing!],
-    ),
-    body: body,
-  );
+        backgroundColor: bg,
+        appBar: AppBar(
+          backgroundColor: bg,
+          elevation: 0,
+          centerTitle: true,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: brown),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(title, style: const TextStyle(color: brown, fontWeight: FontWeight.bold)),
+          ),
+          actions: [if (trailing != null) trailing!],
+        ),
+        body: SafeArea(top: false, child: body),
+      );
 }
 
-Widget primary(BuildContext c, String text, VoidCallback onTap) => SizedBox(
-  width: double.infinity,
-  height: 56,
-  child: FilledButton(
-    style: FilledButton.styleFrom(
-      backgroundColor: brown,
-      foregroundColor: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-    ),
-    onPressed: onTap,
-    child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-  ),
-);
+Widget primary(BuildContext c, String text, VoidCallback? onTap) => SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: brown,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        ),
+        onPressed: onTap,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(text, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
 
 Widget softButton(String text, IconData icon, VoidCallback? onTap) => Expanded(
-  child: Padding(
-    padding: const EdgeInsets.all(6),
-    child: FilledButton(
-      style: FilledButton.styleFrom(
-        backgroundColor: Colors.white,
-        disabledBackgroundColor: Colors.white54,
-        foregroundColor: brown,
-        padding: const EdgeInsets.symmetric(vertical: 18),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(5),
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: brown,
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          ),
+          onPressed: onTap,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 28),
+                const SizedBox(height: 4),
+                Text(text, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ),
       ),
-      onPressed: onTap,
-      child: Column(children: [Icon(icon, size: 30), const SizedBox(height: 6), Text(text)]),
-    ),
-  ),
-);
+    );

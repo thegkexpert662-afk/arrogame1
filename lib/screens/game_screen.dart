@@ -6,8 +6,7 @@ import '../engine/arrow_puzzle_engine.dart';
 
 class GameScreen extends StatefulWidget {
   const GameScreen({super.key});
-  @override
-  State<GameScreen> createState() => _GameScreenState();
+  @override State<GameScreen> createState() => _GameScreenState();
 }
 
 class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateMixin {
@@ -34,8 +33,9 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     configured = true;
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is Map) {
-      level = (args['level'] as int?) ?? 1;
-      difficulty = _parseDifficulty(args['difficulty'] as String?);
+      final rawLevel = args['level'];
+      level = rawLevel is int ? rawLevel.clamp(1, 100) : 1;
+      difficulty = _parseDifficulty(args['difficulty'] is String ? args['difficulty'] as String : null);
     }
     engine = ArrowPuzzleEngine.forLevel(level, difficulty: difficulty);
   }
@@ -48,14 +48,14 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
       };
 
   Future<void> _move(int index) async {
-    if (busy || !mounted) return;
+    if (busy || !mounted || index < 0 || index >= engine.arrows.length) return;
     final selected = engine.arrows[index].copy();
     if (!engine.canMove(index)) {
       setState(() {
-        lives--;
+        lives = max(0, lives - 1);
         hintIndex = null;
       });
-      if (lives <= 0) await _outOfLives();
+      if (lives == 0) await _outOfLives();
       return;
     }
 
@@ -99,6 +99,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     if (!mounted) return;
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (c) => AlertDialog(
         title: const Text('Try again'),
         content: const Text('You used all three tries. The puzzle is reset so you can try a new order.'),
@@ -114,6 +115,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   }
 
   void _hint() {
+    if (busy) return;
     final index = engine.hintIndex();
     setState(() => hintIndex = index);
     if (index != null) {
@@ -124,6 +126,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
   }
 
   void _tap(Offset position, Size size) {
+    if (busy) return;
     for (var i = engine.arrows.length - 1; i >= 0; i--) {
       if (engine.hitTest(i, position, size)) {
         _move(i);
@@ -147,64 +150,65 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         elevation: 0,
         centerTitle: true,
         leading: IconButton(icon: const Icon(Icons.arrow_back, color: brown), onPressed: () => Navigator.pop(context)),
-        title: Column(children: [
-          Text('Level $level', style: const TextStyle(color: brown, fontWeight: FontWeight.w800)),
-          Text(ArrowPuzzleEngine.difficultyName(difficulty), style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w700, fontSize: 14)),
-        ]),
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(children: [
+            Text('Level $level', style: const TextStyle(color: brown, fontWeight: FontWeight.w800)),
+            Text(ArrowPuzzleEngine.difficultyName(difficulty), style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w700, fontSize: 14)),
+          ]),
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.palette_outlined, color: brown), onPressed: () {}),
           IconButton(icon: const Icon(Icons.settings_outlined, color: brown), onPressed: () => Navigator.pushNamed(context, '/settings')),
         ],
       ),
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 6, 22, 8),
-          child: Row(children: [
-            ...List.generate(3, (i) => Padding(
-              padding: const EdgeInsets.only(right: 9),
-              child: Icon(Icons.water_drop, color: i < lives ? blue : Colors.black12, size: 34),
-            )),
-            const Spacer(),
-            IconButton(
-              tooltip: 'Hint',
-              icon: Icon(Icons.lightbulb_outline, color: hintIndex == null ? brown : orange, size: 32),
-              onPressed: busy ? null : _hint,
-            ),
-          ]),
-        ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 2, 10, 4),
-            child: LayoutBuilder(builder: (context, constraints) {
-              final boardSize = Size(constraints.maxWidth, constraints.maxHeight);
-              return GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTapUp: (d) => _tap(d.localPosition, boardSize),
-                child: AnimatedBuilder(
-                  animation: exitController,
-                  builder: (context, _) => CustomPaint(
-                    painter: ArrowBoardPainter(
-                      engine.arrows,
-                      hintIndex: hintIndex,
-                      exiting: exiting,
-                      exitProgress: exitController.value,
-                    ),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              );
-            }),
+      body: SafeArea(
+        top: false,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+            child: Row(children: [
+              ...List.generate(3, (i) => Padding(
+                padding: const EdgeInsets.only(right: 7),
+                child: Icon(Icons.water_drop, color: i < lives ? blue : Colors.black12, size: 31),
+              )),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Hint',
+                icon: Icon(Icons.lightbulb_outline, color: hintIndex == null ? brown : orange, size: 30),
+                onPressed: busy ? null : _hint,
+              ),
+            ]),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 7, 14, 20),
-          child: Row(children: [
-            softButton('Undo', Icons.undo, busy ? null : () => setState(engine.undo)),
-            softButton('Reset', Icons.refresh, busy ? null : () => setState(() { engine.reset(); lives = 3; hintIndex = null; })),
-            softButton('Hint', Icons.lightbulb_outline, busy ? null : _hint),
-          ]),
-        ),
-      ]),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 2),
+              child: LayoutBuilder(builder: (context, constraints) {
+                final boardSize = Size(constraints.maxWidth, constraints.maxHeight);
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: (d) => _tap(d.localPosition, boardSize),
+                  child: AnimatedBuilder(
+                    animation: exitController,
+                    builder: (context, _) => CustomPaint(
+                      painter: ArrowBoardPainter(engine.arrows, hintIndex: hintIndex, exiting: exiting, exitProgress: exitController.value),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 5, 10, 12),
+            child: Row(children: [
+              softButton('Undo', Icons.undo, busy ? null : () => setState(engine.undo)),
+              softButton('Reset', Icons.refresh, busy ? null : () => setState(() { engine.reset(); lives = 3; hintIndex = null; })),
+              softButton('Hint', Icons.lightbulb_outline, busy ? null : _hint),
+            ]),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -219,21 +223,10 @@ class ArrowBoardPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final base = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round
-      ..color = brown;
-    final head = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.2
-      ..strokeCap = StrokeCap.round
-      ..color = orange;
-    final hintPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 5.5
-      ..strokeCap = StrokeCap.round
-      ..color = orange.withOpacity(.30);
+    if (size.width <= 0 || size.height <= 0) return;
+    final base = Paint()..style = PaintingStyle.stroke..strokeWidth = max(1.5, min(2.2, size.shortestSide / 190))..strokeCap = StrokeCap.round..color = brown;
+    final head = Paint()..style = PaintingStyle.stroke..strokeWidth = max(2.2, min(3.4, size.shortestSide / 115))..strokeCap = StrokeCap.round..color = orange;
+    final hintPaint = Paint()..style = PaintingStyle.stroke..strokeWidth = max(4, min(6.5, size.shortestSide / 55))..strokeCap = StrokeCap.round..color = orange.withOpacity(.30);
 
     for (var i = 0; i < arrows.length; i++) {
       _drawArrow(canvas, size, arrows[i], i == hintIndex ? hintPaint : base, head);
@@ -246,7 +239,7 @@ class ArrowBoardPainter extends CustomPainter {
       final start = Offset(a.x * size.width, a.y * size.height) + v * scale * exitProgress;
       final end = start + v * a.length * scale;
       canvas.drawLine(start, end, head);
-      _drawHead(canvas, end, v, head);
+      _drawHead(canvas, end, v, head, size.shortestSide);
     }
   }
 
@@ -256,14 +249,16 @@ class ArrowBoardPainter extends CustomPainter {
     final v = a.direction.vector;
     final end = start + v * a.length * scale;
     canvas.drawLine(start, end, shaft);
-    _drawHead(canvas, end, v, head);
+    _drawHead(canvas, end, v, head, size.shortestSide);
   }
 
-  void _drawHead(Canvas canvas, Offset end, Offset v, Paint paint) {
+  void _drawHead(Canvas canvas, Offset end, Offset v, Paint paint, double shortestSide) {
     final perp = Offset(-v.dy, v.dx);
-    final back = end - v * 12;
-    canvas.drawLine(end, back + perp * 6, paint);
-    canvas.drawLine(end, back - perp * 6, paint);
+    final headLength = max(8.0, min(14.0, shortestSide / 32));
+    final headWidth = max(4.5, min(7.0, shortestSide / 65));
+    final back = end - v * headLength;
+    canvas.drawLine(end, back + perp * headWidth, paint);
+    canvas.drawLine(end, back - perp * headWidth, paint);
   }
 
   @override

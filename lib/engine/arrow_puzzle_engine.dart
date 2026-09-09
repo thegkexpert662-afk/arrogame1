@@ -20,6 +20,8 @@ class ArrowPuzzleEngine {
   })  : arrows = source.map((e) => e.copy()).toList(),
         _initial = source.map((e) => e.copy()).toList();
 
+  int get initialCount => _initial.length;
+
   factory ArrowPuzzleEngine.forLevel(int level, {PuzzleDifficulty difficulty = PuzzleDifficulty.normal}) {
     return ArrowPuzzleEngine(_generate(level, difficulty), level: level, difficulty: difficulty);
   }
@@ -49,7 +51,7 @@ class ArrowPuzzleEngine {
       for (var i = 0; i < count; i++) {
         final direction = ArrowDirection.values[random.nextInt(4)];
         final length = minLength + random.nextDouble() * (maxLength - minLength);
-        final margin = .06;
+        const margin = .06;
         final x = margin + random.nextDouble() * (1 - margin * 2);
         final y = margin + random.nextDouble() * (1 - margin * 2);
         result.add(Arrow('L${level}_$i', x, y, length, direction));
@@ -58,7 +60,6 @@ class ArrowPuzzleEngine {
       if (probe.validateSolvable()) return result;
     }
 
-    // Guaranteed safe fallback: parallel lanes always have an exit order.
     final result = <Arrow>[];
     final lanes = max(5, count);
     for (var i = 0; i < lanes; i++) {

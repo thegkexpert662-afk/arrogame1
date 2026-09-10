@@ -224,41 +224,174 @@ class ArrowBoardPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-    final base = Paint()..style = PaintingStyle.stroke..strokeWidth = max(1.5, min(2.2, size.shortestSide / 190))..strokeCap = StrokeCap.round..color = brown;
-    final head = Paint()..style = PaintingStyle.stroke..strokeWidth = max(2.2, min(3.4, size.shortestSide / 115))..strokeCap = StrokeCap.round..color = orange;
-    final hintPaint = Paint()..style = PaintingStyle.stroke..strokeWidth = max(4, min(6.5, size.shortestSide / 55))..strokeCap = StrokeCap.round..color = orange.withOpacity(.30);
+
+    final scale = min(size.width, size.height);
+    final shaftWidth = max(5.0, min(8.0, scale / 70));
+    final headWidth = max(7.0, min(11.0, scale / 50));
+    final headLength = max(12.0, min(19.0, scale / 28));
+
+    final base = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = shaftWidth
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = orange;
+
+    final hintPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = shaftWidth + 5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = orange.withOpacity(.30);
+
+    final head = Paint()
+      ..style = PaintingStyle.fill
+      ..color = orange;
+
+    // Subtle grid, matching the grid-based puzzle style.
+    _drawGrid(canvas, size);
 
     for (var i = 0; i < arrows.length; i++) {
-      _drawArrow(canvas, size, arrows[i], i == hintIndex ? hintPaint : base, head);
+      _drawArrow(canvas, size, arrows[i], i == hintIndex ? hintPaint : base, head,
+          headLength, headWidth);
     }
 
     if (exiting != null) {
-      final a = exiting!;
-      final v = a.direction.vector;
-      final scale = min(size.width, size.height);
-      final start = Offset(a.x * size.width, a.y * size.height) + v * scale * exitProgress;
-      final end = start + v * a.length * scale;
-      canvas.drawLine(start, end, head);
-      _drawHead(canvas, end, v, head, size.shortestSide);
+      _drawExiting(canvas, size, exiting!, exitProgress, head, headLength, headWidth);
     }
   }
 
-  void _drawArrow(Canvas canvas, Size size, Arrow a, Paint shaft, Paint head) {
-    final scale = min(size.width, size.height);
-    final start = Offset(a.x * size.width, a.y * size.height);
-    final v = a.direction.vector;
-    final end = start + v * a.length * scale;
-    canvas.drawLine(start, end, shaft);
-    _drawHead(canvas, end, v, head, size.shortestSide);
+  void _drawGrid(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.7
+      ..color = brown.withOpacity(.10);
+
+    const grid = 9;
+    for (var i = 0; i < grid; i++) {
+      final t = i / (grid - 1);
+      final x = t * size.width;
+      final y = t * size.height;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    }
   }
 
-  void _drawHead(Canvas canvas, Offset end, Offset v, Paint paint, double shortestSide) {
+  Offset _point(Size size, ArrowPoint p) {
+    const grid = 9;
+    final cellX = size.width / (grid - 1);
+    final cellY = size.height / (grid - 1);
+    return Offset(p.col * cellX, p.row * cellY);
+  }
+
+  void _drawArrow(
+    Canvas canvas,
+    Size size,
+    Arrow a,
+    Paint shaft,
+    Paint head,
+    double headLength,
+    double headWidth,
+  ) {
+    if (!a.isPathArrow) {
+      final scale = min(size.width, size.height);
+      final start = Offset(a.x * size.width, a.y * size.height);
+      final v = a.direction.vector;
+      final end = start + v * a.length * scale;
+      canvas.drawLine(start, end, shaft);
+      _drawHead(canvas, end, v, head, headLength, headWidth);
+      return;
+    }
+
+    final points = a.path.map((p) => _point(size, p)).toList();
+    if (points.length < 2) return;
+
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+
+    canvas.drawPath(path, shaft);
+
+    final end = points.last;
+    final before = points[points.length - 2];
+    final delta = end - before;
+    final distance = delta.distance;
+    if (distance > 0) {
+      final v = delta / distance;
+      _drawHead(canvas, end, v, head, headLength, headWidth);
+    }
+  }
+
+  void _drawExiting(
+    Canvas canvas,
+    Size size,
+    Arrow a,
+    double progress,
+    Paint head,
+    double headLength,
+    double headWidth,
+  ) {
+    if (a.isPathArrow && a.path.length >= 2) {
+      final points = a.path.map((p) => _point(size, p)).toList();
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (var i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx, points[i].dy);
+      }
+      canvas.save();
+      canvas.translate(a.direction.vector.dx * size.width * progress,
+          a.direction.vector.dy * size.height * progress);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = max(5.0, min(8.0, min(size.width, size.height) / 70))
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = orange,
+      );
+      final end = points.last;
+      final before = points[points.length - 2];
+      final delta = end - before;
+      if (delta.distance > 0) {
+        final v = delta / delta.distance;
+        _drawHead(canvas, end, v, head, headLength, headWidth);
+      }
+      canvas.restore();
+      return;
+    }
+
+    final scale = min(size.width, size.height);
+    final v = a.direction.vector;
+    final start = Offset(a.x * size.width, a.y * size.height) + v * scale * progress;
+    final end = start + v * a.length * scale;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = max(5.0, min(8.0, scale / 70))
+      ..strokeCap = StrokeCap.round
+      ..color = orange;
+    canvas.drawLine(start, end, paint);
+    _drawHead(canvas, end, v, head, headLength, headWidth);
+  }
+
+  void _drawHead(
+    Canvas canvas,
+    Offset end,
+    Offset v,
+    Paint paint,
+    double headLength,
+    double headWidth,
+  ) {
     final perp = Offset(-v.dy, v.dx);
-    final headLength = max(8.0, min(14.0, shortestSide / 32));
-    final headWidth = max(4.5, min(7.0, shortestSide / 65));
     final back = end - v * headLength;
-    canvas.drawLine(end, back + perp * headWidth, paint);
-    canvas.drawLine(end, back - perp * headWidth, paint);
+    final p1 = back + perp * headWidth;
+    final p2 = back - perp * headWidth;
+    final triangle = Path()
+      ..moveTo(end.dx, end.dy)
+      ..lineTo(p1.dx, p1.dy)
+      ..lineTo(p2.dx, p2.dy)
+      ..close();
+    canvas.drawPath(triangle, paint);
   }
 
   @override

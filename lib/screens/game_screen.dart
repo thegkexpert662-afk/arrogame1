@@ -221,6 +221,8 @@ class ArrowBoardPainter extends CustomPainter {
 
   ArrowBoardPainter(this.arrows, {this.hintIndex, this.exiting, this.exitProgress = 0});
 
+  int get gridSize => arrows.isNotEmpty ? arrows.first.gridSize : 9;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
@@ -248,12 +250,10 @@ class ArrowBoardPainter extends CustomPainter {
       ..style = PaintingStyle.fill
       ..color = orange;
 
-    // Subtle grid, matching the grid-based puzzle style.
     _drawGrid(canvas, size);
 
     for (var i = 0; i < arrows.length; i++) {
-      _drawArrow(canvas, size, arrows[i], i == hintIndex ? hintPaint : base, head,
-          headLength, headWidth);
+      _drawArrow(canvas, size, arrows[i], i == hintIndex ? hintPaint : base, head, headLength, headWidth);
     }
 
     if (exiting != null) {
@@ -267,9 +267,9 @@ class ArrowBoardPainter extends CustomPainter {
       ..strokeWidth = 0.7
       ..color = brown.withOpacity(.10);
 
-    const grid = 9;
-    for (var i = 0; i < grid; i++) {
-      final t = i / (grid - 1);
+    final cells = max(2, gridSize - 1);
+    for (var i = 0; i < gridSize; i++) {
+      final t = i / cells;
       final x = t * size.width;
       final y = t * size.height;
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), gridPaint);
@@ -277,22 +277,12 @@ class ArrowBoardPainter extends CustomPainter {
     }
   }
 
-  Offset _point(Size size, ArrowPoint p) {
-    const grid = 9;
-    final cellX = size.width / (grid - 1);
-    final cellY = size.height / (grid - 1);
-    return Offset(p.col * cellX, p.row * cellY);
+  Offset _point(Size size, Arrow a, ArrowPoint p) {
+    final cells = max(2, a.gridSize - 1);
+    return Offset(p.col * size.width / cells, p.row * size.height / cells);
   }
 
-  void _drawArrow(
-    Canvas canvas,
-    Size size,
-    Arrow a,
-    Paint shaft,
-    Paint head,
-    double headLength,
-    double headWidth,
-  ) {
+  void _drawArrow(Canvas canvas, Size size, Arrow a, Paint shaft, Paint head, double headLength, double headWidth) {
     if (!a.isPathArrow) {
       final scale = min(size.width, size.height);
       final start = Offset(a.x * size.width, a.y * size.height);
@@ -303,44 +293,26 @@ class ArrowBoardPainter extends CustomPainter {
       return;
     }
 
-    final points = a.path.map((p) => _point(size, p)).toList();
+    final points = a.path.map((p) => _point(size, a, p)).toList();
     if (points.length < 2) return;
 
     final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-
+    for (var i = 1; i < points.length; i++) path.lineTo(points[i].dx, points[i].dy);
     canvas.drawPath(path, shaft);
 
     final end = points.last;
     final before = points[points.length - 2];
     final delta = end - before;
-    final distance = delta.distance;
-    if (distance > 0) {
-      final v = delta / distance;
-      _drawHead(canvas, end, v, head, headLength, headWidth);
-    }
+    if (delta.distance > 0) _drawHead(canvas, end, delta / delta.distance, head, headLength, headWidth);
   }
 
-  void _drawExiting(
-    Canvas canvas,
-    Size size,
-    Arrow a,
-    double progress,
-    Paint head,
-    double headLength,
-    double headWidth,
-  ) {
+  void _drawExiting(Canvas canvas, Size size, Arrow a, double progress, Paint head, double headLength, double headWidth) {
     if (a.isPathArrow && a.path.length >= 2) {
-      final points = a.path.map((p) => _point(size, p)).toList();
+      final points = a.path.map((p) => _point(size, a, p)).toList();
       final path = Path()..moveTo(points.first.dx, points.first.dy);
-      for (var i = 1; i < points.length; i++) {
-        path.lineTo(points[i].dx, points[i].dy);
-      }
+      for (var i = 1; i < points.length; i++) path.lineTo(points[i].dx, points[i].dy);
       canvas.save();
-      canvas.translate(a.direction.vector.dx * size.width * progress,
-          a.direction.vector.dy * size.height * progress);
+      canvas.translate(a.direction.vector.dx * size.width * progress, a.direction.vector.dy * size.height * progress);
       canvas.drawPath(
         path,
         Paint()
@@ -353,10 +325,7 @@ class ArrowBoardPainter extends CustomPainter {
       final end = points.last;
       final before = points[points.length - 2];
       final delta = end - before;
-      if (delta.distance > 0) {
-        final v = delta / delta.distance;
-        _drawHead(canvas, end, v, head, headLength, headWidth);
-      }
+      if (delta.distance > 0) _drawHead(canvas, end, delta / delta.distance, head, headLength, headWidth);
       canvas.restore();
       return;
     }
@@ -374,14 +343,7 @@ class ArrowBoardPainter extends CustomPainter {
     _drawHead(canvas, end, v, head, headLength, headWidth);
   }
 
-  void _drawHead(
-    Canvas canvas,
-    Offset end,
-    Offset v,
-    Paint paint,
-    double headLength,
-    double headWidth,
-  ) {
+  void _drawHead(Canvas canvas, Offset end, Offset v, Paint paint, double headLength, double headWidth) {
     final perp = Offset(-v.dy, v.dx);
     final back = end - v * headLength;
     final p1 = back + perp * headWidth;

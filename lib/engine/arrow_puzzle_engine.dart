@@ -29,16 +29,16 @@ class ArrowPuzzleEngine {
   static List<Arrow> _generate(int level, PuzzleDifficulty difficulty) {
     final random = Random(level * 7919 + difficulty.index * 104729);
     final grid = switch (difficulty) {
-      PuzzleDifficulty.easy => min(9, 7 + level ~/ 30),
-      PuzzleDifficulty.normal => min(11, 8 + level ~/ 25),
-      PuzzleDifficulty.hard => min(13, 9 + level ~/ 20),
-      PuzzleDifficulty.expert => min(15, 10 + level ~/ 15),
+      PuzzleDifficulty.easy => 9,
+      PuzzleDifficulty.normal => 10,
+      PuzzleDifficulty.hard => 11,
+      PuzzleDifficulty.expert => 12,
     };
     final count = switch (difficulty) {
-      PuzzleDifficulty.easy => min(22, 7 + level ~/ 4),
-      PuzzleDifficulty.normal => min(38, 12 + level ~/ 3),
-      PuzzleDifficulty.hard => min(52, 18 + level ~/ 2),
-      PuzzleDifficulty.expert => min(68, 24 + level),
+      PuzzleDifficulty.easy => min(18, 9 + level ~/ 8),
+      PuzzleDifficulty.normal => min(28, 13 + level ~/ 5),
+      PuzzleDifficulty.hard => min(34, 17 + level ~/ 4),
+      PuzzleDifficulty.expert => min(40, 21 + level ~/ 3),
     };
     final maxTurns = switch (difficulty) {
       PuzzleDifficulty.easy => 1,
@@ -54,51 +54,40 @@ class ArrowPuzzleEngine {
     };
     final cell = 1.0 / (grid - 1);
 
-    for (var attempt = 0; attempt < 450; attempt++) {
+    // Generate many candidates and keep only boards that have a legal
+    // removal order. The random seed makes every level deterministic.
+    for (var attempt = 0; attempt < 700; attempt++) {
       final result = <Arrow>[];
-      final occupied = <String>{};
+      final occupiedPoints = <String>{};
+      final occupiedEdges = <String>{};
 
       for (var i = 0; i < count; i++) {
         Arrow? candidate;
-        for (var tryArrow = 0; tryArrow < 80; tryArrow++) {
-          final path = _makePath(random, grid, maxTurns, maxSteps, occupied);
+        for (var trial = 0; trial < 120; trial++) {
+          final path = _makePath(random, grid, maxTurns, maxSteps);
           if (path == null || path.length < 2) continue;
-          final points = path.map((p) => '${p.row}:${p.col}').toList();
+          if (!_fits(path, occupiedPoints, occupiedEdges)) continue;
+
           final last = path.last;
-          final prev = path[path.length - 2];
-          final finalDirection = Arrow.directionBetween(prev, last);
-          final key = points.join('|');
-          if (occupied.contains(key)) continue;
+          final previous = path[path.length - 2];
+          final finalDirection = Arrow.directionBetween(previous, last);
           candidate = Arrow(
             'L${level}_$i',
-            last.col * cell,
-            last.row * cell,
+            path.first.col * cell,
+            path.first.row * cell,
             (path.length - 1) * cell,
             finalDirection,
             path: path,
+            gridSize: grid,
           );
-          // Reserve a small clearance around every path point. This makes
-          // the dense board look close-packed while preventing touching.
-          final expanded = <String>{};
-          for (final p in path) {
-            for (var dr = -1; dr <= 1; dr++) {
-              for (var dc = -1; dc <= 1; dc++) {
-                expanded.add('${p.row + dr}:${p.col + dc}');
-              }
-            }
-          }
-          if (expanded.any(occupied.contains)) {
-            candidate = null;
-            continue;
-          }
-          occupied.addAll(expanded);
+          _reserve(path, occupiedPoints, occupiedEdges);
           break;
         }
         if (candidate == null) break;
         result.add(candidate);
       }
 
-      if (result.length >= max(3, count * 0.75).floor() && _isSolvable(result)) {
+      if (result.length >= max(5, (count * .70).floor()) && _isSolvable(result)) {
         return result;
       }
     }
@@ -106,18 +95,12 @@ class ArrowPuzzleEngine {
     return _fallback(level, difficulty, grid, cell);
   }
 
-  static List<ArrowPoint>? _makePath(
-    Random random,
-    int grid,
-    int maxTurns,
-    int maxSteps,
-    Set<String> occupied,
-  ) {
+  static List<ArrowPoint>? _makePath(Random random, int grid, int maxTurns, int maxSteps) {
     var row = random.nextInt(grid);
     var col = random.nextInt(grid);
     final path = <ArrowPoint>[ArrowPoint(row, col)];
     var direction = ArrowDirection.values[random.nextInt(4)];
-    var turns = random.nextInt(maxTurns + 1);
+    final turns = random.nextInt(maxTurns + 1);
 
     for (var segment = 0; segment <= turns; segment++) {
       final steps = 1 + random.nextInt(maxSteps);
@@ -125,60 +108,105 @@ class ArrowPuzzleEngine {
         final nr = row + direction.vector.dy.toInt();
         final nc = col + direction.vector.dx.toInt();
         if (nr < 0 || nr >= grid || nc < 0 || nc >= grid) {
-          // A path ending on the boundary is useful because its final
-          // direction can point out of the board.
-          if (path.length >= 2 && (row == 0 || row == grid - 1 || col == 0 || col == grid - 1)) {
-            return path;
-          }
-          return null;
+          return _pointsOutward(path, row, col, direction, grid);
         }
-        final key = '$nr:$nc';
-        if (occupied.contains(key) || path.any((p) => p.row == nr && p.col == nc)) return null;
         row = nr;
         col = nc;
         path.add(ArrowPoint(row, col));
       }
+
       if (segment < turns) {
-        final choices = ArrowDirection.values.where((d) => d != direction && d.vector.dx != -direction.vector.dx && d.vector.dy != -direction.vector.dy).toList();
-        direction = choices[random.nextInt(choices.length)];
+        final perpendicular = <ArrowDirection>[
+          if (direction == ArrowDirection.up || direction == ArrowDirection.down) ...[
+            ArrowDirection.left,
+            ArrowDirection.right,
+          ] else ...[
+            ArrowDirection.up,
+            ArrowDirection.down,
+          ],
+        ];
+        direction = perpendicular[random.nextInt(perpendicular.length)];
       }
     }
 
-    // Extend the final segment to the nearest boundary when possible.
-    while (row > 0 && row < grid - 1 && col > 0 && col < grid - 1) {
+    // Continue the last segment until it reaches an edge. This guarantees
+    // that the arrowhead points outward and can leave the board.
+    while (true) {
+      if (_isOutwardBoundary(row, col, direction, grid)) return path;
       final nr = row + direction.vector.dy.toInt();
       final nc = col + direction.vector.dx.toInt();
-      if (nr < 0 || nr >= grid || nc < 0 || nc >= grid) break;
-      if (occupied.contains('$nr:$nc') || path.any((p) => p.row == nr && p.col == nc)) return null;
+      if (nr < 0 || nr >= grid || nc < 0 || nc >= grid) return path;
       row = nr;
       col = nc;
       path.add(ArrowPoint(row, col));
     }
-    if (row == 0 || row == grid - 1 || col == 0 || col == grid - 1) return path;
-    return null;
+  }
+
+  static List<ArrowPoint>? _pointsOutward(List<ArrowPoint> path, int row, int col, ArrowDirection direction, int grid) {
+    return _isOutwardBoundary(row, col, direction, grid) ? path : null;
+  }
+
+  static bool _isOutwardBoundary(int row, int col, ArrowDirection direction, int grid) {
+    return (direction == ArrowDirection.up && row == 0) ||
+        (direction == ArrowDirection.down && row == grid - 1) ||
+        (direction == ArrowDirection.left && col == 0) ||
+        (direction == ArrowDirection.right && col == grid - 1);
+  }
+
+  static bool _fits(List<ArrowPoint> path, Set<String> points, Set<String> edges) {
+    for (var i = 0; i < path.length; i++) {
+      final p = path[i];
+      if (points.contains('${p.row}:${p.col}')) return false;
+      if (i == 0) continue;
+      final a = path[i - 1];
+      final b = path[i];
+      final edge = _edgeKey(a, b);
+      if (edges.contains(edge)) return false;
+      // Orthogonal segments can only cross on a grid point. Since every
+      // visited point is reserved, crossings and touching are rejected.
+      if (points.contains('${a.row}:${a.col}') && i > 1) return false;
+    }
+    return true;
+  }
+
+  static void _reserve(List<ArrowPoint> path, Set<String> points, Set<String> edges) {
+    for (var i = 0; i < path.length; i++) {
+      final p = path[i];
+      points.add('${p.row}:${p.col}');
+      if (i > 0) edges.add(_edgeKey(path[i - 1], p));
+    }
+  }
+
+  static String _edgeKey(ArrowPoint a, ArrowPoint b) {
+    final first = '${a.row}:${a.col}';
+    final second = '${b.row}:${b.col}';
+    return first.compareTo(second) < 0 ? '$first|$second' : '$second|$first';
   }
 
   static List<Arrow> _fallback(int level, PuzzleDifficulty difficulty, int grid, double cell) {
     final result = <Arrow>[];
     final count = switch (difficulty) {
       PuzzleDifficulty.easy => 8,
-      PuzzleDifficulty.normal => 14,
-      PuzzleDifficulty.hard => 20,
-      PuzzleDifficulty.expert => 28,
+      PuzzleDifficulty.normal => 12,
+      PuzzleDifficulty.hard => 16,
+      PuzzleDifficulty.expert => 20,
     };
+
+    // Guaranteed valid 90-degree paths arranged in separate rows/columns.
     for (var i = 0; i < count; i++) {
-      final row = i % grid;
-      final fromLeft = i.isEven;
-      final direction = fromLeft ? ArrowDirection.right : ArrowDirection.left;
-      final endCol = fromLeft ? grid - 1 : 0;
-      final startCol = fromLeft ? 0 : grid - 1;
+      final row = min(grid - 2, 1 + (i * 2) % max(1, grid - 2));
+      final col = i.isEven ? 1 : grid - 2;
+      final horizontal = i.isEven;
       final path = <ArrowPoint>[];
-      final step = fromLeft ? 1 : -1;
-      for (var c = startCol;; c += step) {
-        path.add(ArrowPoint(row, c));
-        if (c == endCol) break;
+      if (horizontal) {
+        for (var c = col; c < grid; c++) path.add(ArrowPoint(row, c));
+      } else {
+        for (var r = row; r >= 0; r--) path.add(ArrowPoint(r, col));
       }
-      result.add(Arrow('safe_${level}_$i', startCol * cell, row * cell, (path.length - 1) * cell, direction, path: path));
+      if (path.length >= 2) {
+        final direction = Arrow.directionBetween(path[path.length - 2], path.last);
+        result.add(Arrow('safe_${level}_$i', path.first.col * cell, path.first.row * cell, (path.length - 1) * cell, direction, path: path, gridSize: grid));
+      }
     }
     return result;
   }
@@ -208,19 +236,26 @@ class ArrowPuzzleEngine {
   }
 
   bool _pathClear(Arrow a, int index, List<Arrow> source) {
-    if (a.path.length < 2) return _straightPathClear(a, index, source);
+    if (!a.isPathArrow) return _straightPathClear(a, index, source);
     final last = a.path.last;
     final previous = a.path[a.path.length - 2];
     final direction = Arrow.directionBetween(previous, last);
     final start = Offset(last.col.toDouble(), last.row.toDouble());
     final end = start + direction.vector * 1000;
+
     for (var i = 0; i < source.length; i++) {
       if (i == index) continue;
       final b = source[i];
-      for (var s = 1; s < b.path.length; s++) {
-        final c = b.path[s - 1];
-        final d = b.path[s];
-        if (_segmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .30)) return false;
+      if (b.isPathArrow) {
+        for (var s = 1; s < b.path.length; s++) {
+          final c = b.path[s - 1];
+          final d = b.path[s];
+          if (_segmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .28)) return false;
+        }
+      } else {
+        final bs = Offset(b.x, b.y);
+        final be = bs + b.direction.vector * b.length;
+        if (_segmentsNear(start, end, bs, be, .04)) return false;
       }
     }
     return true;
@@ -232,9 +267,17 @@ class ArrowPuzzleEngine {
     for (var i = 0; i < source.length; i++) {
       if (i == index) continue;
       final b = source[i];
-      final bs = Offset(b.x, b.y);
-      final be = bs + b.direction.vector * b.length;
-      if (_segmentsNear(start, end, bs, be, .040)) return false;
+      if (b.isPathArrow) {
+        for (var s = 1; s < b.path.length; s++) {
+          final c = b.path[s - 1];
+          final d = b.path[s];
+          if (_segmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .28)) return false;
+        }
+      } else {
+        final bs = Offset(b.x, b.y);
+        final be = bs + b.direction.vector * b.length;
+        if (_segmentsNear(start, end, bs, be, .04)) return false;
+      }
     }
     return true;
   }
@@ -256,28 +299,21 @@ class ArrowPuzzleEngine {
   bool hitTest(int index, Offset pos, Size size) {
     if (index < 0 || index >= arrows.length || size.width <= 0 || size.height <= 0) return false;
     final a = arrows[index];
-    final scale = min(size.width, size.height);
-    final p = Offset(pos.dx / size.width * (size.width / scale), pos.dy / size.height * (size.height / scale));
-    if (a.path.length >= 2) {
+    if (a.isPathArrow) {
+      final grid = max(1, a.gridSize - 1);
+      final p = Offset(pos.dx / size.width * grid, pos.dy / size.height * grid);
       for (var i = 1; i < a.path.length; i++) {
-        final s = Offset(a.path[i - 1].col / max(1, _gridFor(a)), a.path[i - 1].row / max(1, _gridFor(a)));
-        final e = Offset(a.path[i].col / max(1, _gridFor(a)), a.path[i].row / max(1, _gridFor(a)));
-        if (_distanceToSegment(p, s, e) < 0.035) return true;
+        final s = Offset(a.path[i - 1].col.toDouble(), a.path[i - 1].row.toDouble());
+        final e = Offset(a.path[i].col.toDouble(), a.path[i].row.toDouble());
+        if (_distanceToSegment(p, s, e) < .34) return true;
       }
       return false;
     }
+    final scale = min(size.width, size.height);
+    final normalized = Offset(pos.dx / size.width, pos.dy / size.height);
     final start = Offset(a.x, a.y);
     final end = start + a.direction.vector * a.length;
-    final threshold = 28 / scale;
-    return _distanceToSegment(Offset(pos.dx / size.width, pos.dy / size.height), start, end) < threshold;
-  }
-
-  int _gridFor(Arrow a) {
-    var maxPoint = 1;
-    for (final p in a.path) {
-      maxPoint = max(maxPoint, max(p.row, p.col));
-    }
-    return maxPoint;
+    return _distanceToSegment(normalized, start, end) < 28 / scale;
   }
 
   void undo() {
@@ -313,22 +349,24 @@ class ArrowPuzzleEngine {
   }
 
   static bool _staticPathClear(Arrow a, int index, List<Arrow> source) {
-    if (a.path.length >= 2) {
-      final last = a.path.last;
-      final previous = a.path[a.path.length - 2];
-      final direction = Arrow.directionBetween(previous, last);
-      final start = Offset(last.col.toDouble(), last.row.toDouble());
-      final end = start + direction.vector * 1000;
-      for (var i = 0; i < source.length; i++) {
-        if (i == index) continue;
-        final b = source[i];
+    final start = a.isPathArrow ? Offset(a.path.last.col.toDouble(), a.path.last.row.toDouble()) : Offset(a.x, a.y);
+    final direction = a.isPathArrow ? Arrow.directionBetween(a.path[a.path.length - 2], a.path.last) : a.direction;
+    final end = start + direction.vector * 1000;
+
+    for (var i = 0; i < source.length; i++) {
+      if (i == index) continue;
+      final b = source[i];
+      if (b.isPathArrow) {
         for (var s = 1; s < b.path.length; s++) {
           final c = b.path[s - 1];
           final d = b.path[s];
-          if (_staticSegmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .30)) return false;
+          if (_staticSegmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .28)) return false;
         }
+      } else {
+        final bs = Offset(b.x, b.y);
+        final be = bs + b.direction.vector * b.length;
+        if (_staticSegmentsNear(start, end, bs, be, .04)) return false;
       }
-      return true;
     }
     return true;
   }

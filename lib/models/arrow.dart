@@ -1,11 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ArrowDirection {
-  up,
-  right,
-  down,
-  left,
-}
+enum ArrowDirection { up, right, down, left }
 
 extension ArrowDirectionX on ArrowDirection {
   Offset get vector => switch (this) {
@@ -16,7 +11,6 @@ extension ArrowDirectionX on ArrowDirection {
       };
 }
 
-/// A single point on the puzzle grid.
 class ArrowPoint {
   final int row;
   final int col;
@@ -26,23 +20,21 @@ class ArrowPoint {
   ArrowPoint copy() => ArrowPoint(row, col);
 
   @override
-  bool operator ==(Object other) =>
-      other is ArrowPoint && other.row == row && other.col == col;
+  bool operator ==(Object other) => other is ArrowPoint && other.row == row && other.col == col;
 
   @override
   int get hashCode => Object.hash(row, col);
 }
 
-/// Arrow can contain multiple connected straight segments.
+/// An arrow may be a straight line or a connected grid path with 90-degree turns.
 class Arrow {
   final String id;
   double x;
   double y;
   double length;
   final ArrowDirection direction;
-
-  /// Complete arrow path. Empty means the legacy straight-arrow form.
   List<ArrowPoint> path;
+  final int gridSize;
 
   Arrow(
     this.id,
@@ -51,21 +43,16 @@ class Arrow {
     this.length,
     this.direction, {
     List<ArrowPoint>? path,
+    this.gridSize = 9,
   }) : path = path ?? <ArrowPoint>[];
 
   bool get isPathArrow => path.length >= 2;
 
-  /// Number of grid steps used by the complete path.
   int get segmentCount {
     if (path.length < 2) return 1;
-
     var count = 0;
     for (var i = 1; i < path.length; i++) {
-      final previous = path[i - 1];
-      final current = path[i];
-      count +=
-          (current.row - previous.row).abs() +
-          (current.col - previous.col).abs();
+      count += (path[i].row - path[i - 1].row).abs() + (path[i].col - path[i - 1].col).abs();
     }
     return count;
   }
@@ -77,39 +64,27 @@ class Arrow {
         length,
         direction,
         path: path.map((p) => p.copy()).toList(),
+        gridSize: gridSize,
       );
 
-  /// Direction between two neighbouring grid points.
   static ArrowDirection directionBetween(ArrowPoint a, ArrowPoint b) {
     final dr = b.row - a.row;
     final dc = b.col - a.col;
-
     if (dr < 0) return ArrowDirection.up;
     if (dr > 0) return ArrowDirection.down;
     if (dc > 0) return ArrowDirection.right;
     return ArrowDirection.left;
   }
 
-  /// Checks that the path contains only adjacent orthogonal grid points
-  /// and never visits the same point twice.
   bool get hasValidPath {
     if (path.length < 2) return false;
-
     final seen = <ArrowPoint>{};
-
     for (var i = 0; i < path.length; i++) {
-      final point = path[i];
-      if (!seen.add(point)) return false;
+      if (!seen.add(path[i])) return false;
       if (i == 0) continue;
-
-      final previous = path[i - 1];
-      final distance =
-          (point.row - previous.row).abs() +
-          (point.col - previous.col).abs();
-
-      if (distance != 1) return false;
+      final d = (path[i].row - path[i - 1].row).abs() + (path[i].col - path[i - 1].col).abs();
+      if (d != 1) return false;
     }
-
     return true;
   }
 }

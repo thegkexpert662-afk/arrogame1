@@ -1,9 +1,7 @@
 import 'arrow.dart';
 
 /// Reusable definition of an arrow shape.
-///
-/// A template contains only the arrow's own properties. A level can reuse the
-/// same template multiple times and choose a different board position/direction.
+/// A level can reuse the same template multiple times.
 class ArrowTemplate {
   final String id;
   final List<ArrowPoint> path;
@@ -19,7 +17,6 @@ class ArrowTemplate {
 
   int get turns {
     if (path.length < 3) return 0;
-
     var count = 0;
     for (var i = 2; i < path.length; i++) {
       final previous = Arrow.directionBetween(path[i - 2], path[i - 1]);
@@ -39,10 +36,7 @@ class ArrowTemplate {
 const ArrowTemplate arrowTemplate01 = ArrowTemplate(
   id: 'arrow_001',
   path: <ArrowPoint>[
-    ArrowPoint(0, 0),
-    ArrowPoint(0, 1),
-    ArrowPoint(0, 2),
-    ArrowPoint(0, 3),
+    ArrowPoint(0, 0), ArrowPoint(0, 1), ArrowPoint(0, 2), ArrowPoint(0, 3),
   ],
   direction: ArrowDirection.right,
 );
@@ -50,36 +44,41 @@ const ArrowTemplate arrowTemplate01 = ArrowTemplate(
 const ArrowTemplate arrowTemplate02 = ArrowTemplate(
   id: 'arrow_002',
   path: <ArrowPoint>[
-    ArrowPoint(0, 0),
-    ArrowPoint(0, 1),
-    ArrowPoint(0, 2),
-    ArrowPoint(0, 3),
-    ArrowPoint(1, 3),
-    ArrowPoint(2, 3),
+    ArrowPoint(0, 0), ArrowPoint(0, 1), ArrowPoint(0, 2), ArrowPoint(0, 3),
+    ArrowPoint(1, 3), ArrowPoint(2, 3),
   ],
   direction: ArrowDirection.right,
 );
 
-/// Third reusable arrow: 2 cells down, then 3 cells right.
-/// Shape:  ↓ ↓ → → →
-/// This is a different orientation of the same 90-degree-turn idea.
 const ArrowTemplate arrowTemplate03 = ArrowTemplate(
   id: 'arrow_003',
   path: <ArrowPoint>[
-    ArrowPoint(0, 0),
-    ArrowPoint(1, 0),
-    ArrowPoint(2, 0),
-    ArrowPoint(2, 1),
-    ArrowPoint(2, 2),
-    ArrowPoint(2, 3),
+    ArrowPoint(0, 0), ArrowPoint(1, 0), ArrowPoint(2, 0),
+    ArrowPoint(2, 1), ArrowPoint(2, 2), ArrowPoint(2, 3),
   ],
   direction: ArrowDirection.down,
 );
 
+/// Fourth reusable arrow: 3 cells right, 2 cells up.
+/// Shape: -> -> -> then ^ ^
+/// It has one 90-degree turn and is different from templates 1-3.
+const ArrowTemplate arrowTemplate04 = ArrowTemplate(
+  id: 'arrow_004',
+  path: <ArrowPoint>[
+    ArrowPoint(2, 0),
+    ArrowPoint(2, 1),
+    ArrowPoint(2, 2),
+    ArrowPoint(2, 3),
+    ArrowPoint(1, 3),
+    ArrowPoint(0, 3),
+  ],
+  direction: ArrowDirection.right,
+);
+
 /// Central registry for reusable arrow templates.
-/// The same template can be selected by multiple levels.
 const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate01,
   arrowTemplate02,
   arrowTemplate03,
+  arrowTemplate04,
 ];

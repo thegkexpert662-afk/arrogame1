@@ -84,14 +84,12 @@ class ArrowPuzzleEngine {
     for (var r = 0; r < rotation; r++) {
       points = points.map((p) => ArrowPoint(p.col, -p.row)).toList();
     }
-
     final minRow = points.map((p) => p.row).reduce(min);
     final minCol = points.map((p) => p.col).reduce(min);
     points = points.map((p) => ArrowPoint(p.row - minRow, p.col - minCol)).toList();
     final maxRow = points.map((p) => p.row).reduce(max);
     final maxCol = points.map((p) => p.col).reduce(max);
     if (maxRow >= grid || maxCol >= grid) return null;
-
     final rowOffset = random.nextInt(grid - maxRow);
     final colOffset = random.nextInt(grid - maxCol);
     return points.map((p) => ArrowPoint(p.row + rowOffset, p.col + colOffset)).toList(growable: false);
@@ -120,7 +118,6 @@ class ArrowPuzzleEngine {
     }
   }
 
-  /// Guaranteed emergency layout: unique short arrows on separate grid edges.
   static List<Arrow> _fallback(int level, LevelConfig config, int count) {
     final cell = 1.0 / (config.gridSize - 1);
     final paths = <List<ArrowPoint>>[];
@@ -172,7 +169,6 @@ class ArrowPuzzleEngine {
     final start = a.isPathArrow ? Offset(a.path.last.col.toDouble(), a.path.last.row.toDouble()) : Offset(a.x, a.y);
     final direction = a.isPathArrow ? Arrow.directionBetween(a.path[a.path.length - 2], a.path.last) : a.direction;
     final end = start + direction.vector * 1000;
-
     for (var i = 0; i < source.length; i++) {
       if (i == index) continue;
       final b = source[i];
@@ -180,21 +176,20 @@ class ArrowPuzzleEngine {
         for (var s = 1; s < b.path.length; s++) {
           final c = b.path[s - 1];
           final d = b.path[s];
-          if (_segmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .32)) {
-            return false;
-          }
+          if (_segmentsNear(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .32)) return false;
         }
       }
     }
     return true;
   }
 
-  bool _isSolvable(List<Arrow> source) {
+  /// Static because level generation runs in a static factory.
+  static bool _isSolvable(List<Arrow> source) {
     var remaining = source.map((e) => e.copy()).toList();
     while (remaining.isNotEmpty) {
       var found = -1;
       for (var i = 0; i < remaining.length; i++) {
-        if (_pathClear(remaining[i], i, remaining)) {
+        if (_pathClearStatic(remaining[i], i, remaining)) {
           found = i;
           break;
         }
@@ -205,19 +200,35 @@ class ArrowPuzzleEngine {
     return true;
   }
 
-  bool hitTest(int index, Offset pos, Size size) {
-    if (index < 0 || index >= arrows.length || size.width <= 0 || size.height <= 0) return false;
-    final a = arrows[index];
-    if (a.isPathArrow) {
-      final p = Offset(pos.dx / size.width * (a.gridSize - 1), pos.dy / size.height * (a.gridSize - 1));
-      for (var i = 1; i < a.path.length; i++) {
-        if (_distanceToSegment(p, Offset(a.path[i - 1].col.toDouble(), a.path[i - 1].row.toDouble()), Offset(a.path[i].col.toDouble(), a.path[i].row.toDouble())) < .40) return true;
+  static bool _pathClearStatic(Arrow a, int index, List<Arrow> source) {
+    final start = a.isPathArrow ? Offset(a.path.last.col.toDouble(), a.path.last.row.toDouble()) : Offset(a.x, a.y);
+    final direction = a.isPathArrow ? Arrow.directionBetween(a.path[a.path.length - 2], a.path.last) : a.direction;
+    final end = start + direction.vector * 1000;
+    for (var i = 0; i < source.length; i++) {
+      if (i == index) continue;
+      final b = source[i];
+      if (b.isPathArrow) {
+        for (var s = 1; s < b.path.length; s++) {
+          final c = b.path[s - 1];
+          final d = b.path[s];
+          if (_segmentsNearStatic(start, end, Offset(c.col.toDouble(), c.row.toDouble()), Offset(d.col.toDouble(), d.row.toDouble()), .32)) return false;
+        }
       }
-      return false;
     }
-    final p = Offset(pos.dx / size.width, pos.dy / size.height);
-    return _distanceToSegment(p, Offset(a.x, a.y), Offset(a.x, a.y) + a.direction.vector * a.length) < 28 / min(size.width, size.height);
+    return true;
   }
+
+  static double _distanceToSegmentStatic(Offset p, Offset a, Offset b) {
+    final dx = b.dx - a.dx;
+    final dy = b.dy - a.dy;
+    final l = dx * dx + dy * dy;
+    if (l <= .0000001) return (p - a).distance;
+    final t = (((p.dx - a.dx) * dx + (p.dy - a.dy) * dy) / l).clamp(0.0, 1.0).toDouble();
+    return (p - Offset(a.dx + t * dx, a.dy + t * dy)).distance;
+  }
+
+  static bool _segmentsNearStatic(Offset a, Offset b, Offset c, Offset d, double limit) =>
+      _distanceToSegmentStatic(a, c, d) < limit || _distanceToSegmentStatic(b, c, d) < limit || _distanceToSegmentStatic(c, a, b) < limit || _distanceToSegmentStatic(d, a, b) < limit;
 
   double _distanceToSegment(Offset p, Offset a, Offset b) {
     final dx = b.dx - a.dx;

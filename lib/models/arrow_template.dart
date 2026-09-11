@@ -59,20 +59,88 @@ const ArrowTemplate arrowTemplate03 = ArrowTemplate(
   direction: ArrowDirection.down,
 );
 
-/// Fourth reusable arrow: 3 cells right, 2 cells up.
-/// Shape: -> -> -> then ^ ^
-/// It has one 90-degree turn and is different from templates 1-3.
 const ArrowTemplate arrowTemplate04 = ArrowTemplate(
   id: 'arrow_004',
   path: <ArrowPoint>[
-    ArrowPoint(2, 0),
-    ArrowPoint(2, 1),
-    ArrowPoint(2, 2),
-    ArrowPoint(2, 3),
-    ArrowPoint(1, 3),
-    ArrowPoint(0, 3),
+    ArrowPoint(2, 0), ArrowPoint(2, 1), ArrowPoint(2, 2), ArrowPoint(2, 3),
+    ArrowPoint(1, 3), ArrowPoint(0, 3),
   ],
   direction: ArrowDirection.right,
+);
+
+/// Arrow 5: 2 cells right, 2 cells down, 1 cell right.
+/// Shape: -> -> v v -> ; two 90-degree turns.
+const ArrowTemplate arrowTemplate05 = ArrowTemplate(
+  id: 'arrow_005',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 0),
+    ArrowPoint(0, 1),
+    ArrowPoint(0, 2),
+    ArrowPoint(1, 2),
+    ArrowPoint(2, 2),
+    ArrowPoint(2, 3),
+  ],
+  direction: ArrowDirection.right,
+);
+
+/// Arrow 6: 2 cells down, 2 cells left, 1 cell down.
+/// Shape: vv << v ; two 90-degree turns.
+const ArrowTemplate arrowTemplate06 = ArrowTemplate(
+  id: 'arrow_006',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 3),
+    ArrowPoint(1, 3),
+    ArrowPoint(2, 3),
+    ArrowPoint(2, 2),
+    ArrowPoint(2, 1),
+    ArrowPoint(3, 1),
+  ],
+  direction: ArrowDirection.down,
+);
+
+/// Arrow 7: 1 cell right, 2 cells up, 2 cells right.
+/// Shape: -> ^^ -> -> ; two 90-degree turns.
+const ArrowTemplate arrowTemplate07 = ArrowTemplate(
+  id: 'arrow_007',
+  path: <ArrowPoint>[
+    ArrowPoint(3, 0),
+    ArrowPoint(3, 1),
+    ArrowPoint(2, 1),
+    ArrowPoint(1, 1),
+    ArrowPoint(1, 2),
+    ArrowPoint(1, 3),
+  ],
+  direction: ArrowDirection.right,
+);
+
+/// Arrow 8: 2 cells left, 1 cell up, 2 cells left.
+/// Shape: << ^ << ; two 90-degree turns.
+const ArrowTemplate arrowTemplate08 = ArrowTemplate(
+  id: 'arrow_008',
+  path: <ArrowPoint>[
+    ArrowPoint(1, 4),
+    ArrowPoint(1, 3),
+    ArrowPoint(1, 2),
+    ArrowPoint(0, 2),
+    ArrowPoint(0, 1),
+    ArrowPoint(0, 0),
+  ],
+  direction: ArrowDirection.left,
+);
+
+/// Arrow 9: 1 cell down, 2 cells right, 2 cells down.
+/// Shape: v -> -> vv ; two 90-degree turns.
+const ArrowTemplate arrowTemplate09 = ArrowTemplate(
+  id: 'arrow_009',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 0),
+    ArrowPoint(1, 0),
+    ArrowPoint(1, 1),
+    ArrowPoint(1, 2),
+    ArrowPoint(2, 2),
+    ArrowPoint(3, 2),
+  ],
+  direction: ArrowDirection.down,
 );
 
 /// Central registry for reusable arrow templates.
@@ -81,4 +149,9 @@ const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate02,
   arrowTemplate03,
   arrowTemplate04,
+  arrowTemplate05,
+  arrowTemplate06,
+  arrowTemplate07,
+  arrowTemplate08,
+  arrowTemplate09,
 ];

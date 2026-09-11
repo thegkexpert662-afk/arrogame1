@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/arrow.dart';
+import '../models/arrow_template.dart';
+import '../levels/level_catalog.dart';
 
 enum PuzzleDifficulty { easy, normal, hard, expert }
 
@@ -13,8 +15,6 @@ class ArrowPuzzleEngine {
   bool completed = false;
   int moves = 0;
 
-  static const int _grid = 9;
-
   ArrowPuzzleEngine(
     List<Arrow> source, {
     this.level = 1,
@@ -23,6 +23,8 @@ class ArrowPuzzleEngine {
         _initial = source.map((e) => e.copy()).toList(growable: false);
 
   int get initialCount => _initial.length;
+
+  int get gridSize => arrows.isNotEmpty ? arrows.first.gridSize : levelConfigFor(level).gridSize;
 
   factory ArrowPuzzleEngine.forLevel(
     int level, {
@@ -40,38 +42,35 @@ class ArrowPuzzleEngine {
       ArrowPuzzleEngine.forLevel(level, difficulty: PuzzleDifficulty.hard);
 
   static List<Arrow> _generate(int level, PuzzleDifficulty difficulty) {
+    final config = levelConfigFor(level);
     final random = Random(level * 7919 + difficulty.index * 104729);
-    final count = switch (difficulty) {
-      PuzzleDifficulty.easy => 10,
-      PuzzleDifficulty.normal => min(16, 12 + level ~/ 12),
-      PuzzleDifficulty.hard => min(20, 15 + level ~/ 10),
-      PuzzleDifficulty.expert => min(24, 18 + level ~/ 8),
+    final difficultyBonus = switch (difficulty) {
+      PuzzleDifficulty.easy => -2,
+      PuzzleDifficulty.normal => 0,
+      PuzzleDifficulty.hard => 2,
+      PuzzleDifficulty.expert => 4,
     };
+    final count = max(6, min(24, config.arrowCount + difficultyBonus));
 
-    final turnChance = switch (difficulty) {
-      PuzzleDifficulty.easy => .48,
-      PuzzleDifficulty.normal => .68,
-      PuzzleDifficulty.hard => .82,
-      PuzzleDifficulty.expert => .92,
-    };
+    final eligible = arrowTemplates.where(config.accepts).toList(growable: false);
+    final templates = eligible.isNotEmpty ? eligible : arrowTemplates;
 
-    for (var boardTry = 0; boardTry < 900; boardTry++) {
+    for (var boardTry = 0; boardTry < 1000; boardTry++) {
       final result = <Arrow>[];
       final occupiedPoints = <String>{};
       final occupiedEdges = <String>{};
 
       for (var i = 0; i < count; i++) {
         Arrow? candidate;
-        for (var trial = 0; trial < 300; trial++) {
-          final path = _randomPath(random, turnChance);
-          if (path == null || !_fits(path, occupiedPoints, occupiedEdges)) {
-            continue;
-          }
+        for (var trial = 0; trial < 400; trial++) {
+          final template = templates[random.nextInt(templates.length)];
+          final path = _placeTemplate(template, config.gridSize, random);
+          if (path == null || !_fits(path, occupiedPoints, occupiedEdges)) continue;
 
           final first = path.first;
           final last = path.last;
           final direction = Arrow.directionBetween(path[path.length - 2], last);
-          final cell = 1.0 / (_grid - 1);
+          final cell = 1.0 / (config.gridSize - 1);
           candidate = Arrow(
             'L${level}_$i',
             first.col * cell,
@@ -79,7 +78,7 @@ class ArrowPuzzleEngine {
             (path.length - 1) * cell,
             direction,
             path: path,
-            gridSize: _grid,
+            gridSize: config.gridSize,
           );
           _reserve(path, occupiedPoints, occupiedEdges);
           break;
@@ -89,44 +88,42 @@ class ArrowPuzzleEngine {
         result.add(candidate);
       }
 
-      if (result.length == count && _isSolvable(result)) {
-        return result;
-      }
+      if (result.length == count && _isSolvable(result)) return result;
     }
 
-    return _fallback(level, difficulty);
+    return _fallback(level, config, count);
   }
 
-  /// Creates a 2-7 point path. Every move is exactly one grid cell.
-  /// Turns are always 90 degrees and never reverse the previous segment.
-  static List<ArrowPoint>? _randomPath(Random random, double turnChance) {
-    final start = ArrowPoint(random.nextInt(_grid), random.nextInt(_grid));
-    final path = <ArrowPoint>[start];
-    var row = start.row;
-    var col = start.col;
-    var direction = ArrowDirection.values[random.nextInt(4)];
-    final steps = 1 + random.nextInt(6); // 1-6 moves = 2-7 points.
+  /// Reuses an existing template by rotating it and moving it to a free
+  /// position. This gives every level different layouts without making a
+  /// separate screen or hard-coding 100 different boards.
+  static List<ArrowPoint>? _placeTemplate(
+    ArrowTemplate template,
+    int grid,
+    Random random,
+  ) {
+    var points = template.path.map((p) => ArrowPoint(p.row, p.col)).toList();
+    final rotation = random.nextInt(4);
 
-    for (var i = 0; i < steps; i++) {
-      if (i > 0 && random.nextDouble() < turnChance) {
-        final turns = (direction == ArrowDirection.up || direction == ArrowDirection.down)
-            ? const [ArrowDirection.left, ArrowDirection.right]
-            : const [ArrowDirection.up, ArrowDirection.down];
-        direction = turns[random.nextInt(2)];
-      }
-
-      final nr = row + direction.vector.dy.toInt();
-      final nc = col + direction.vector.dx.toInt();
-      if (nr < 0 || nr >= _grid || nc < 0 || nc >= _grid) return null;
-
-      final next = ArrowPoint(nr, nc);
-      if (path.contains(next)) return null;
-      path.add(next);
-      row = nr;
-      col = nc;
+    for (var r = 0; r < rotation; r++) {
+      points = points.map((p) => ArrowPoint(p.col, -p.row)).toList();
     }
 
-    return path;
+    final minRow = points.map((p) => p.row).reduce(min);
+    final minCol = points.map((p) => p.col).reduce(min);
+    points = points
+        .map((p) => ArrowPoint(p.row - minRow, p.col - minCol))
+        .toList();
+
+    final maxRow = points.map((p) => p.row).reduce(max);
+    final maxCol = points.map((p) => p.col).reduce(max);
+    if (maxRow >= grid || maxCol >= grid) return null;
+
+    final rowOffset = random.nextInt(grid - maxRow);
+    final colOffset = random.nextInt(grid - maxCol);
+    return points
+        .map((p) => ArrowPoint(p.row + rowOffset, p.col + colOffset))
+        .toList(growable: false);
   }
 
   static String _pointKey(ArrowPoint p) => '${p.row}:${p.col}';
@@ -137,8 +134,8 @@ class ArrowPuzzleEngine {
     return aKey.compareTo(bKey) < 0 ? '$aKey|$bKey' : '$bKey|$aKey';
   }
 
-  /// Arrows may be adjacent on the grid, but they can never share a point
-  /// or a grid edge. This keeps them visually dense while preventing touch/cross.
+  /// Adjacent arrows are allowed, but sharing a point or exact grid edge is not.
+  /// Crossing is also rejected by the solvability/path-clear checks.
   static bool _fits(
     List<ArrowPoint> path,
     Set<String> occupiedPoints,
@@ -146,9 +143,7 @@ class ArrowPuzzleEngine {
   ) {
     for (var i = 0; i < path.length; i++) {
       if (occupiedPoints.contains(_pointKey(path[i]))) return false;
-      if (i > 0 && occupiedEdges.contains(_edgeKey(path[i - 1], path[i]))) {
-        return false;
-      }
+      if (i > 0 && occupiedEdges.contains(_edgeKey(path[i - 1], path[i]))) return false;
     }
     return true;
   }
@@ -164,30 +159,20 @@ class ArrowPuzzleEngine {
     }
   }
 
-  static List<Arrow> _fallback(int level, PuzzleDifficulty difficulty) {
-    final cell = 1.0 / (_grid - 1);
-    final templates = <List<ArrowPoint>>[
-      [const ArrowPoint(0, 0), const ArrowPoint(0, 2), const ArrowPoint(1, 2)],
-      [const ArrowPoint(0, 4), const ArrowPoint(1, 4), const ArrowPoint(1, 6)],
-      [const ArrowPoint(0, 8), const ArrowPoint(2, 8), const ArrowPoint(2, 7)],
-      [const ArrowPoint(2, 0), const ArrowPoint(3, 0), const ArrowPoint(3, 2), const ArrowPoint(4, 2)],
-      [const ArrowPoint(3, 4), const ArrowPoint(4, 4), const ArrowPoint(4, 3), const ArrowPoint(5, 3)],
-      [const ArrowPoint(4, 6), const ArrowPoint(4, 8), const ArrowPoint(6, 8)],
-      [const ArrowPoint(5, 0), const ArrowPoint(7, 0), const ArrowPoint(7, 2)],
-      [const ArrowPoint(6, 4), const ArrowPoint(8, 4), const ArrowPoint(8, 2)],
-      [const ArrowPoint(6, 6), const ArrowPoint(7, 6), const ArrowPoint(7, 8)],
-      [const ArrowPoint(8, 6), const ArrowPoint(8, 7), const ArrowPoint(7, 7)],
-    ];
-
-    final count = switch (difficulty) {
-      PuzzleDifficulty.easy => 8,
-      PuzzleDifficulty.normal => 10,
-      PuzzleDifficulty.hard => 10,
-      PuzzleDifficulty.expert => 10,
-    };
+  static List<Arrow> _fallback(int level, LevelConfig config, int count) {
+    final cell = 1.0 / (config.gridSize - 1);
+    final paths = <List<ArrowPoint>>[];
+    for (var r = 0; r < config.gridSize - 2; r += 2) {
+      paths.add(<ArrowPoint>[
+        ArrowPoint(r, 0),
+        ArrowPoint(r, 1),
+        ArrowPoint(r, 2),
+      ]);
+      if (paths.length >= count) break;
+    }
 
     return List.generate(count, (i) {
-      final path = templates[i % templates.length];
+      final path = paths[i % paths.length];
       final last = path.last;
       final direction = Arrow.directionBetween(path[path.length - 2], last);
       return Arrow(
@@ -197,7 +182,7 @@ class ArrowPuzzleEngine {
         (path.length - 1) * cell,
         direction,
         path: path,
-        gridSize: _grid,
+        gridSize: config.gridSize,
       );
     });
   }
@@ -246,9 +231,7 @@ class ArrowPuzzleEngine {
             Offset(c.col.toDouble(), c.row.toDouble()),
             Offset(d.col.toDouble(), d.row.toDouble()),
             .32,
-          )) {
-            return false;
-          }
+          )) return false;
         }
       }
     }
@@ -284,10 +267,7 @@ class ArrowPuzzleEngine {
               p,
               Offset(a.path[i - 1].col.toDouble(), a.path[i - 1].row.toDouble()),
               Offset(a.path[i].col.toDouble(), a.path[i].row.toDouble()),
-            ) <
-            .40) {
-          return true;
-        }
+            ) < .40) return true;
       }
       return false;
     }
@@ -296,8 +276,7 @@ class ArrowPuzzleEngine {
           p,
           Offset(a.x, a.y),
           Offset(a.x, a.y) + a.direction.vector * a.length,
-        ) <
-        28 / min(size.width, size.height);
+        ) < 28 / min(size.width, size.height);
   }
 
   double _distanceToSegment(Offset p, Offset a, Offset b) {

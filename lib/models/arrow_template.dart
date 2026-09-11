@@ -163,18 +163,15 @@ const ArrowTemplate arrowTemplate43 = ArrowTemplate(id: 'arrow_043', path: <Arro
   ArrowPoint(0, 0), ArrowPoint(1, 0), ArrowPoint(1, 1), ArrowPoint(0, 1), ArrowPoint(0, 2), ArrowPoint(1, 2), ArrowPoint(1, 3),
 ], direction: ArrowDirection.down);
 const ArrowTemplate arrowTemplate44 = ArrowTemplate(id: 'arrow_044', path: <ArrowPoint>[
-  ArrowPoint(3, 3), ArrowPoint(3, 2), ArrowPoint(2, 2), ArrowPoint(2, 3), ArrowPoint(1, 3), ArrowPoint(1, 2), ArrowPoint(0, 2),
+  ArrowPoint(3, 3), ArrowPoint(3, 2), ArrowPoint(2, 2), ArrowPoint(2, 3), ArrowPoint(1, 3), ArrowPoint(0, 3),
 ], direction: ArrowDirection.left);
 const ArrowTemplate arrowTemplate45 = ArrowTemplate(id: 'arrow_045', path: <ArrowPoint>[
-  ArrowPoint(0, 3), ArrowPoint(1, 3), ArrowPoint(1, 2), ArrowPoint(2, 2), ArrowPoint(2, 1), ArrowPoint(3, 1), ArrowPoint(3, 0),
-], direction: ArrowDirection.right);
-
+  ArrowPoint(0, 3), ArrowPoint(0, 2), ArrowPoint(1, 2), ArrowPoint(1, 3), ArrowPoint(2, 3), ArrowPoint(2, 2), ArrowPoint(3, 2),
+], direction: ArrowDirection.left);
 /// Arrow 46: a compact zig-zag with four 90-degree turns.
-/// Directions: right -> down -> right -> down -> right.
 const ArrowTemplate arrowTemplate46 = ArrowTemplate(id: 'arrow_046', path: <ArrowPoint>[
   ArrowPoint(0, 0), ArrowPoint(0, 1), ArrowPoint(1, 1), ArrowPoint(1, 2), ArrowPoint(2, 2), ArrowPoint(2, 3),
 ], direction: ArrowDirection.right);
-
 const ArrowTemplate arrowTemplate47 = ArrowTemplate(id: 'arrow_047', path: <ArrowPoint>[
   ArrowPoint(0, 0), ArrowPoint(1, 0), ArrowPoint(1, 1), ArrowPoint(2, 1), ArrowPoint(2, 2), ArrowPoint(2, 3),
 ], direction: ArrowDirection.down);
@@ -248,6 +245,43 @@ const ArrowTemplate arrowTemplate70 = ArrowTemplate(id: 'arrow_070', path: <Arro
   ArrowPoint(3, 0), ArrowPoint(2, 0), ArrowPoint(2, 1), ArrowPoint(1, 1), ArrowPoint(1, 0), ArrowPoint(0, 0),
 ], direction: ArrowDirection.up);
 
+// 10x10 templates: exactly 2 turns, with each straight run exactly 2 grid cells.
+const ArrowTemplate arrowTemplate79 = ArrowTemplate(id: 'arrow_079', path: <ArrowPoint>[
+  ArrowPoint(0, 0), ArrowPoint(0, 1), ArrowPoint(0, 2),
+  ArrowPoint(1, 2), ArrowPoint(2, 2),
+  ArrowPoint(2, 3), ArrowPoint(2, 4),
+], direction: ArrowDirection.right);
+const ArrowTemplate arrowTemplate80 = ArrowTemplate(id: 'arrow_080', path: <ArrowPoint>[
+  ArrowPoint(0, 7), ArrowPoint(0, 8), ArrowPoint(0, 9),
+  ArrowPoint(1, 9), ArrowPoint(2, 9),
+  ArrowPoint(2, 8), ArrowPoint(2, 7),
+], direction: ArrowDirection.left);
+const ArrowTemplate arrowTemplate81 = ArrowTemplate(id: 'arrow_081', path: <ArrowPoint>[
+  ArrowPoint(7, 0), ArrowPoint(8, 0), ArrowPoint(9, 0),
+  ArrowPoint(9, 1), ArrowPoint(9, 2),
+  ArrowPoint(8, 2), ArrowPoint(7, 2),
+], direction: ArrowDirection.down);
+const ArrowTemplate arrowTemplate82 = ArrowTemplate(id: 'arrow_082', path: <ArrowPoint>[
+  ArrowPoint(7, 9), ArrowPoint(8, 9), ArrowPoint(9, 9),
+  ArrowPoint(9, 8), ArrowPoint(9, 7),
+  ArrowPoint(8, 7), ArrowPoint(7, 7),
+], direction: ArrowDirection.up);
+const ArrowTemplate arrowTemplate83 = ArrowTemplate(id: 'arrow_083', path: <ArrowPoint>[
+  ArrowPoint(3, 1), ArrowPoint(3, 2), ArrowPoint(3, 3),
+  ArrowPoint(4, 3), ArrowPoint(5, 3),
+  ArrowPoint(5, 4), ArrowPoint(5, 5),
+], direction: ArrowDirection.right);
+const ArrowTemplate arrowTemplate84 = ArrowTemplate(id: 'arrow_084', path: <ArrowPoint>[
+  ArrowPoint(4, 8), ArrowPoint(4, 9),
+  ArrowPoint(5, 9), ArrowPoint(6, 9),
+  ArrowPoint(6, 8), ArrowPoint(6, 7),
+], direction: ArrowDirection.right);
+const ArrowTemplate arrowTemplate85 = ArrowTemplate(id: 'arrow_085', path: <ArrowPoint>[
+  ArrowPoint(6, 4), ArrowPoint(6, 5), ArrowPoint(6, 6),
+  ArrowPoint(7, 6), ArrowPoint(8, 6),
+  ArrowPoint(8, 7), ArrowPoint(8, 8),
+], direction: ArrowDirection.right);
+
 /// Central registry for reusable arrow templates.
 const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate01, arrowTemplate02, arrowTemplate03, arrowTemplate04, arrowTemplate05,
@@ -264,4 +298,6 @@ const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate56, arrowTemplate57, arrowTemplate58, arrowTemplate59, arrowTemplate60,
   arrowTemplate61, arrowTemplate62, arrowTemplate63, arrowTemplate64, arrowTemplate65,
   arrowTemplate66, arrowTemplate67, arrowTemplate68, arrowTemplate69, arrowTemplate70,
+  arrowTemplate79, arrowTemplate80, arrowTemplate81, arrowTemplate82, arrowTemplate83,
+  arrowTemplate84, arrowTemplate85,
 ];

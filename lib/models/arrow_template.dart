@@ -36,7 +36,6 @@ class ArrowTemplate {
       );
 }
 
-/// First reusable arrow in the library.
 const ArrowTemplate arrowTemplate01 = ArrowTemplate(
   id: 'arrow_001',
   path: <ArrowPoint>[
@@ -48,9 +47,6 @@ const ArrowTemplate arrowTemplate01 = ArrowTemplate(
   direction: ArrowDirection.right,
 );
 
-/// Second reusable arrow: 3 cells right, then 2 cells down.
-/// Shape:  -> -> -> v v
-/// This gives the template one 90-degree turn.
 const ArrowTemplate arrowTemplate02 = ArrowTemplate(
   id: 'arrow_002',
   path: <ArrowPoint>[
@@ -64,9 +60,26 @@ const ArrowTemplate arrowTemplate02 = ArrowTemplate(
   direction: ArrowDirection.right,
 );
 
+/// Third reusable arrow: 2 cells down, then 3 cells right.
+/// Shape:  ↓ ↓ → → →
+/// This is a different orientation of the same 90-degree-turn idea.
+const ArrowTemplate arrowTemplate03 = ArrowTemplate(
+  id: 'arrow_003',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 0),
+    ArrowPoint(1, 0),
+    ArrowPoint(2, 0),
+    ArrowPoint(2, 1),
+    ArrowPoint(2, 2),
+    ArrowPoint(2, 3),
+  ],
+  direction: ArrowDirection.down,
+);
+
 /// Central registry for reusable arrow templates.
 /// The same template can be selected by multiple levels.
 const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate01,
   arrowTemplate02,
+  arrowTemplate03,
 ];

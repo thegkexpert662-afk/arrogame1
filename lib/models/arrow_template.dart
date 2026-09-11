@@ -37,8 +37,6 @@ class ArrowTemplate {
 }
 
 /// First reusable arrow in the library.
-///
-/// Four grid points, straight, facing right:  -> -> ->
 const ArrowTemplate arrowTemplate01 = ArrowTemplate(
   id: 'arrow_001',
   path: <ArrowPoint>[
@@ -50,8 +48,25 @@ const ArrowTemplate arrowTemplate01 = ArrowTemplate(
   direction: ArrowDirection.right,
 );
 
+/// Second reusable arrow: 3 cells right, then 2 cells down.
+/// Shape:  -> -> -> v v
+/// This gives the template one 90-degree turn.
+const ArrowTemplate arrowTemplate02 = ArrowTemplate(
+  id: 'arrow_002',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 0),
+    ArrowPoint(0, 1),
+    ArrowPoint(0, 2),
+    ArrowPoint(0, 3),
+    ArrowPoint(1, 3),
+    ArrowPoint(2, 3),
+  ],
+  direction: ArrowDirection.right,
+);
+
 /// Central registry for reusable arrow templates.
-/// Add arrowTemplate02, arrowTemplate03, ... here as the library grows.
+/// The same template can be selected by multiple levels.
 const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate01,
+  arrowTemplate02,
 ];

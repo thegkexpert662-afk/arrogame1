@@ -217,6 +217,8 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
     );
   }
 
+  void _buildHeaderDummy() {}
+
   Widget _buildHeader(bool compact) {
     return Padding(
       padding: EdgeInsets.fromLTRB(compact ? 12 : 28, 10, compact ? 12 : 28, 4),
@@ -229,11 +231,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
               fit: BoxFit.scaleDown,
               child: RichText(
                 text: const TextSpan(
-                  style: TextStyle(
-                    fontSize: 38,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -1.5,
-                  ),
+                  style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900, letterSpacing: -1.5),
                   children: [
                     TextSpan(text: 'Arrow ', style: TextStyle(color: _text)),
                     TextSpan(text: 'Puzzle', style: TextStyle(color: Color(0xFF24A8FF))),
@@ -245,7 +243,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
           if (!compact) ...[
             _statCard('Level', '$level'),
             const SizedBox(width: 8),
-            _statCard('Grid', '9 × 9'),
+            _statCard('Grid', '${engine.gridSize} × ${engine.gridSize}'),
             const SizedBox(width: 8),
             _statCard('Arrows', '${engine.arrows.length}'),
             const SizedBox(width: 8),
@@ -280,10 +278,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
             ],
           ),
           const SizedBox(height: 2),
-          Text(
-            value,
-            style: const TextStyle(color: _text, fontSize: 20, fontWeight: FontWeight.w800),
-          ),
+          Text(value, style: const TextStyle(color: _text, fontSize: 20, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -326,9 +321,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
         color: const Color(0xFF04121E),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _line, width: 2),
-        boxShadow: const [
-          BoxShadow(color: Color(0x66000000), blurRadius: 20, spreadRadius: 2),
-        ],
+        boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 20, spreadRadius: 2)],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -410,10 +403,7 @@ class _GameScreenState extends State<GameScreen> with SingleTickerProviderStateM
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFFF3E55),
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: const BoxDecoration(color: Color(0xFFFF3E55), shape: BoxShape.circle),
                       child: Text('$badge', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
                     ),
                   ],
@@ -452,65 +442,33 @@ class ArrowBoardPainter extends CustomPainter {
   final Arrow? exiting;
   final double exitProgress;
 
-  ArrowBoardPainter(
-    this.arrows, {
-    this.hintIndex,
-    this.exiting,
-    this.exitProgress = 0,
-  });
+  ArrowBoardPainter(this.arrows, {this.hintIndex, this.exiting, this.exitProgress = 0});
 
   int get gridSize => arrows.isNotEmpty ? arrows.first.gridSize : 9;
 
   static const _colors = <Color>[
-    Color(0xFFFF3B42),
-    Color(0xFF22C7FF),
-    Color(0xFF45F51F),
-    Color(0xFFFFD21C),
-    Color(0xFFB347FF),
-    Color(0xFFFF2E9A),
-    Color(0xFFFF9215),
-    Color(0xFF248BFF),
-    Color(0xFF20E0CF),
-    Color(0xFF9D63FF),
+    Color(0xFFFF3B42), Color(0xFF22C7FF), Color(0xFF45F51F), Color(0xFFFFD21C),
+    Color(0xFFB347FF), Color(0xFFFF2E9A), Color(0xFFFF9215), Color(0xFF248BFF),
+    Color(0xFF20E0CF), Color(0xFF9D63FF),
   ];
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-
     final scale = min(size.width, size.height);
     final shaftWidth = max(5.0, min(9.0, scale / 62));
     final headWidth = max(8.0, min(13.0, scale / 44));
     final headLength = max(14.0, min(22.0, scale / 24));
-
     _drawGrid(canvas, size);
-
     for (var i = 0; i < arrows.length; i++) {
-      final color = _colors[i % _colors.length];
-      _drawArrow(
-        canvas,
-        size,
-        arrows[i],
-        color,
-        i == hintIndex,
-        shaftWidth,
-        headLength,
-        headWidth,
-      );
+      _drawArrow(canvas, size, arrows[i], _colors[i % _colors.length], i == hintIndex, shaftWidth, headLength, headWidth);
     }
-
-    if (exiting != null) {
-      _drawExiting(canvas, size, exiting!, exitProgress, shaftWidth, headLength, headWidth);
-    }
+    if (exiting != null) _drawExiting(canvas, size, exiting!, exitProgress, shaftWidth, headLength, headWidth);
   }
 
   void _drawGrid(Canvas canvas, Size size) {
     final cells = max(2, gridSize - 1);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.8
-      ..color = _line.withOpacity(.72);
-
+    final paint = Paint()..style = PaintingStyle.stroke..strokeWidth = 0.8..color = _line.withOpacity(.72);
     for (var i = 0; i < gridSize; i++) {
       final t = i / cells;
       final x = t * size.width;
@@ -525,107 +483,50 @@ class ArrowBoardPainter extends CustomPainter {
     return Offset(p.col * size.width / cells, p.row * size.height / cells);
   }
 
-  void _drawArrow(
-    Canvas canvas,
-    Size size,
-    Arrow a,
-    Color color,
-    bool highlighted,
-    double shaftWidth,
-    double headLength,
-    double headWidth,
-  ) {
+  void _drawArrow(Canvas canvas, Size size, Arrow a, Color color, bool highlighted, double shaftWidth, double headLength, double headWidth) {
     if (!a.isPathArrow || a.path.length < 2) return;
-
     final points = a.path.map((p) => _point(size, a, p)).toList();
     final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-
-    final glow = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = shaftWidth + (highlighted ? 10 : 6)
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color.withOpacity(highlighted ? .35 : .10);
+    for (var i = 1; i < points.length; i++) path.lineTo(points[i].dx, points[i].dy);
+    final glow = Paint()..style = PaintingStyle.stroke..strokeWidth = shaftWidth + (highlighted ? 10 : 6)..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = color.withOpacity(highlighted ? .35 : .10);
     canvas.drawPath(path, glow);
-
-    final shaft = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = shaftWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..color = color;
+    final shaft = Paint()..style = PaintingStyle.stroke..strokeWidth = shaftWidth..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = color;
     canvas.drawPath(path, shaft);
-
-    final start = points.first;
-    canvas.drawCircle(start, shaftWidth * .95, Paint()..color = color);
-
+    canvas.drawCircle(points.first, shaftWidth * .95, Paint()..color = color);
     final end = points.last;
     final before = points[points.length - 2];
     final delta = end - before;
-    if (delta.distance > 0) {
-      _drawHead(canvas, end, delta / delta.distance, Paint()..color = color, headLength, headWidth);
-    }
+    if (delta.distance > 0) _drawHead(canvas, end, delta / delta.distance, Paint()..color = color, headLength, headWidth);
   }
 
-  void _drawExiting(
-    Canvas canvas,
-    Size size,
-    Arrow a,
-    double progress,
-    double shaftWidth,
-    double headLength,
-    double headWidth,
-  ) {
+  void _drawExiting(Canvas canvas, Size size, Arrow a, double progress, double shaftWidth, double headLength, double headWidth) {
     if (!a.isPathArrow || a.path.length < 2) return;
     final color = _colors[(int.tryParse(a.id.split('_').last) ?? 0) % _colors.length];
     final points = a.path.map((p) => _point(size, a, p)).toList();
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (var i = 1; i < points.length; i++) path.lineTo(points[i].dx, points[i].dy);
-
     final end = points.last;
     final before = points[points.length - 2];
     final delta = end - before;
     final direction = delta.distance > 0 ? delta / delta.distance : const Offset(1, 0);
-
     canvas.save();
     canvas.translate(direction.dx * size.width * progress, direction.dy * size.height * progress);
-    canvas.drawPath(
-      path,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = shaftWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..color = color,
-    );
+    canvas.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = shaftWidth..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = color);
     canvas.drawCircle(points.first, shaftWidth * .95, Paint()..color = color);
     _drawHead(canvas, end, direction, Paint()..color = color, headLength, headWidth);
     canvas.restore();
   }
 
-  void _drawHead(
-    Canvas canvas,
-    Offset end,
-    Offset direction,
-    Paint paint,
-    double headLength,
-    double headWidth,
-  ) {
+  void _drawHead(Canvas canvas, Offset end, Offset direction, Paint paint, double headLength, double headWidth) {
     final perp = Offset(-direction.dy, direction.dx);
     final back = end - direction * headLength;
     final p1 = back + perp * headWidth;
     final p2 = back - perp * headWidth;
-    final triangle = Path()
-      ..moveTo(end.dx, end.dy)
-      ..lineTo(p1.dx, p1.dy)
-      ..lineTo(p2.dx, p2.dy)
-      ..close();
-    canvas.drawPath(triangle, paint);
+    final head = Path()..moveTo(end.dx, end.dy)..lineTo(p1.dx, p1.dy)..lineTo(p2.dx, p2.dy)..close();
+    canvas.drawPath(head, paint);
   }
 
   @override
-  bool shouldRepaint(covariant ArrowBoardPainter oldDelegate) => true;
+  bool shouldRepaint(covariant ArrowBoardPainter oldDelegate) =>
+      oldDelegate.arrows != arrows || oldDelegate.hintIndex != hintIndex || oldDelegate.exiting != exiting || oldDelegate.exitProgress != exitProgress;
 }

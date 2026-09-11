@@ -132,15 +132,7 @@ class ArrowPuzzleEngine {
       final path = paths[i % paths.length];
       final last = path.last;
       final direction = Arrow.directionBetween(path[path.length - 2], last);
-      return Arrow(
-        'safe_${level}_$i',
-        path.first.col * cell,
-        path.first.row * cell,
-        cell,
-        direction,
-        path: path,
-        gridSize: config.gridSize,
-      );
+      return Arrow('safe_${level}_$i', path.first.col * cell, path.first.row * cell, cell, direction, path: path, gridSize: config.gridSize);
     });
   }
 
@@ -183,7 +175,6 @@ class ArrowPuzzleEngine {
     return true;
   }
 
-  /// Static because level generation runs in a static factory.
   static bool _isSolvable(List<Arrow> source) {
     var remaining = source.map((e) => e.copy()).toList();
     while (remaining.isNotEmpty) {
@@ -216,6 +207,31 @@ class ArrowPuzzleEngine {
       }
     }
     return true;
+  }
+
+  /// Checks whether the user tapped any segment of an arrow.
+  /// Path coordinates are converted from pixels to grid coordinates first.
+  bool hitTest(int index, Offset pos, Size size) {
+    if (index < 0 || index >= arrows.length || size.width <= 0 || size.height <= 0) return false;
+    final arrow = arrows[index];
+
+    if (arrow.isPathArrow) {
+      final grid = arrow.gridSize - 1;
+      final point = Offset(
+        pos.dx / size.width * grid,
+        pos.dy / size.height * grid,
+      );
+      for (var i = 1; i < arrow.path.length; i++) {
+        final a = Offset(arrow.path[i - 1].col.toDouble(), arrow.path[i - 1].row.toDouble());
+        final b = Offset(arrow.path[i].col.toDouble(), arrow.path[i].row.toDouble());
+        if (_distanceToSegment(point, a, b) <= .48) return true;
+      }
+      return false;
+    }
+
+    final point = Offset(pos.dx / size.width, pos.dy / size.height);
+    final end = Offset(arrow.x, arrow.y) + arrow.direction.vector * arrow.length;
+    return _distanceToSegment(point, Offset(arrow.x, arrow.y), end) < 28 / min(size.width, size.height);
   }
 
   static double _distanceToSegmentStatic(Offset p, Offset a, Offset b) {

@@ -68,77 +68,148 @@ const ArrowTemplate arrowTemplate04 = ArrowTemplate(
   direction: ArrowDirection.right,
 );
 
-/// Arrow 5: 2 cells right, 2 cells down, 1 cell right.
-/// Shape: -> -> v v -> ; two 90-degree turns.
 const ArrowTemplate arrowTemplate05 = ArrowTemplate(
   id: 'arrow_005',
   path: <ArrowPoint>[
-    ArrowPoint(0, 0),
-    ArrowPoint(0, 1),
-    ArrowPoint(0, 2),
-    ArrowPoint(1, 2),
-    ArrowPoint(2, 2),
-    ArrowPoint(2, 3),
+    ArrowPoint(0, 0), ArrowPoint(0, 1), ArrowPoint(0, 2),
+    ArrowPoint(1, 2), ArrowPoint(2, 2), ArrowPoint(2, 3),
   ],
   direction: ArrowDirection.right,
 );
 
-/// Arrow 6: 2 cells down, 2 cells left, 1 cell down.
-/// Shape: vv << v ; two 90-degree turns.
 const ArrowTemplate arrowTemplate06 = ArrowTemplate(
   id: 'arrow_006',
   path: <ArrowPoint>[
-    ArrowPoint(0, 3),
-    ArrowPoint(1, 3),
-    ArrowPoint(2, 3),
-    ArrowPoint(2, 2),
-    ArrowPoint(2, 1),
-    ArrowPoint(3, 1),
+    ArrowPoint(0, 3), ArrowPoint(1, 3), ArrowPoint(2, 3),
+    ArrowPoint(2, 2), ArrowPoint(2, 1), ArrowPoint(3, 1),
   ],
   direction: ArrowDirection.down,
 );
 
-/// Arrow 7: 1 cell right, 2 cells up, 2 cells right.
-/// Shape: -> ^^ -> -> ; two 90-degree turns.
 const ArrowTemplate arrowTemplate07 = ArrowTemplate(
   id: 'arrow_007',
   path: <ArrowPoint>[
-    ArrowPoint(3, 0),
-    ArrowPoint(3, 1),
-    ArrowPoint(2, 1),
-    ArrowPoint(1, 1),
-    ArrowPoint(1, 2),
+    ArrowPoint(3, 0), ArrowPoint(3, 1), ArrowPoint(2, 1),
+    ArrowPoint(1, 1), ArrowPoint(1, 2), ArrowPoint(1, 3),
+  ],
+  direction: ArrowDirection.right,
+);
+
+const ArrowTemplate arrowTemplate08 = ArrowTemplate(
+  id: 'arrow_008',
+  path: <ArrowPoint>[
+    ArrowPoint(1, 4), ArrowPoint(1, 3), ArrowPoint(1, 2),
+    ArrowPoint(0, 2), ArrowPoint(0, 1), ArrowPoint(0, 0),
+  ],
+  direction: ArrowDirection.left,
+);
+
+const ArrowTemplate arrowTemplate09 = ArrowTemplate(
+  id: 'arrow_009',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 0), ArrowPoint(1, 0), ArrowPoint(1, 1),
+    ArrowPoint(1, 2), ArrowPoint(2, 2), ArrowPoint(3, 2),
+  ],
+  direction: ArrowDirection.down,
+);
+
+const ArrowTemplate arrowTemplate10 = ArrowTemplate(
+  id: 'arrow_010',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 0), ArrowPoint(1, 0), ArrowPoint(2, 0), ArrowPoint(3, 0),
+    ArrowPoint(3, 1), ArrowPoint(3, 2), ArrowPoint(3, 3),
+  ],
+  direction: ArrowDirection.down,
+);
+
+const ArrowTemplate arrowTemplate11 = ArrowTemplate(
+  id: 'arrow_011',
+  path: <ArrowPoint>[
+    ArrowPoint(3, 3), ArrowPoint(2, 3), ArrowPoint(1, 3), ArrowPoint(0, 3),
+    ArrowPoint(0, 2), ArrowPoint(0, 1), ArrowPoint(0, 0),
+  ],
+  direction: ArrowDirection.up,
+);
+
+const ArrowTemplate arrowTemplate12 = ArrowTemplate(
+  id: 'arrow_012',
+  path: <ArrowPoint>[
+    ArrowPoint(3, 0), ArrowPoint(3, 1), ArrowPoint(3, 2),
+    ArrowPoint(2, 2), ArrowPoint(1, 2), ArrowPoint(0, 2),
+  ],
+  direction: ArrowDirection.right,
+);
+
+const ArrowTemplate arrowTemplate13 = ArrowTemplate(
+  id: 'arrow_013',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 3), ArrowPoint(0, 2), ArrowPoint(0, 1),
+    ArrowPoint(1, 1), ArrowPoint(2, 1), ArrowPoint(2, 0),
+  ],
+  direction: ArrowDirection.left,
+);
+
+const ArrowTemplate arrowTemplate14 = ArrowTemplate(
+  id: 'arrow_014',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 1), ArrowPoint(1, 1), ArrowPoint(2, 1),
+    ArrowPoint(2, 2), ArrowPoint(2, 3), ArrowPoint(3, 3),
+  ],
+  direction: ArrowDirection.down,
+);
+
+const ArrowTemplate arrowTemplate15 = ArrowTemplate(
+  id: 'arrow_015',
+  path: <ArrowPoint>[
+    ArrowPoint(3, 2), ArrowPoint(2, 2), ArrowPoint(1, 2), ArrowPoint(0, 2),
+    ArrowPoint(0, 1), ArrowPoint(0, 0),
+  ],
+  direction: ArrowDirection.up,
+);
+
+const ArrowTemplate arrowTemplate16 = ArrowTemplate(
+  id: 'arrow_016',
+  path: <ArrowPoint>[
+    ArrowPoint(1, 0), ArrowPoint(1, 1), ArrowPoint(1, 2), ArrowPoint(1, 3),
+    ArrowPoint(2, 3), ArrowPoint(3, 3),
+  ],
+  direction: ArrowDirection.right,
+);
+
+const ArrowTemplate arrowTemplate17 = ArrowTemplate(
+  id: 'arrow_017',
+  path: <ArrowPoint>[
+    ArrowPoint(3, 1), ArrowPoint(3, 2), ArrowPoint(2, 2),
+    ArrowPoint(1, 2), ArrowPoint(1, 1), ArrowPoint(1, 0),
+  ],
+  direction: ArrowDirection.right,
+);
+
+const ArrowTemplate arrowTemplate18 = ArrowTemplate(
+  id: 'arrow_018',
+  path: <ArrowPoint>[
+    ArrowPoint(0, 2), ArrowPoint(1, 2), ArrowPoint(2, 2),
+    ArrowPoint(2, 1), ArrowPoint(2, 0), ArrowPoint(3, 0),
+  ],
+  direction: ArrowDirection.down,
+);
+
+const ArrowTemplate arrowTemplate19 = ArrowTemplate(
+  id: 'arrow_019',
+  path: <ArrowPoint>[
+    ArrowPoint(2, 0), ArrowPoint(2, 1), ArrowPoint(1, 1),
+    ArrowPoint(0, 1), ArrowPoint(0, 2), ArrowPoint(0, 3),
     ArrowPoint(1, 3),
   ],
   direction: ArrowDirection.right,
 );
 
-/// Arrow 8: 2 cells left, 1 cell up, 2 cells left.
-/// Shape: << ^ << ; two 90-degree turns.
-const ArrowTemplate arrowTemplate08 = ArrowTemplate(
-  id: 'arrow_008',
+const ArrowTemplate arrowTemplate20 = ArrowTemplate(
+  id: 'arrow_020',
   path: <ArrowPoint>[
-    ArrowPoint(1, 4),
-    ArrowPoint(1, 3),
-    ArrowPoint(1, 2),
-    ArrowPoint(0, 2),
-    ArrowPoint(0, 1),
-    ArrowPoint(0, 0),
-  ],
-  direction: ArrowDirection.left,
-);
-
-/// Arrow 9: 1 cell down, 2 cells right, 2 cells down.
-/// Shape: v -> -> vv ; two 90-degree turns.
-const ArrowTemplate arrowTemplate09 = ArrowTemplate(
-  id: 'arrow_009',
-  path: <ArrowPoint>[
-    ArrowPoint(0, 0),
-    ArrowPoint(1, 0),
-    ArrowPoint(1, 1),
-    ArrowPoint(1, 2),
-    ArrowPoint(2, 2),
-    ArrowPoint(3, 2),
+    ArrowPoint(0, 3), ArrowPoint(1, 3), ArrowPoint(1, 2),
+    ArrowPoint(1, 1), ArrowPoint(2, 1), ArrowPoint(3, 1),
+    ArrowPoint(3, 0),
   ],
   direction: ArrowDirection.down,
 );
@@ -154,4 +225,15 @@ const List<ArrowTemplate> arrowTemplates = <ArrowTemplate>[
   arrowTemplate07,
   arrowTemplate08,
   arrowTemplate09,
+  arrowTemplate10,
+  arrowTemplate11,
+  arrowTemplate12,
+  arrowTemplate13,
+  arrowTemplate14,
+  arrowTemplate15,
+  arrowTemplate16,
+  arrowTemplate17,
+  arrowTemplate18,
+  arrowTemplate19,
+  arrowTemplate20,
 ];
